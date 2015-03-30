@@ -1004,7 +1004,7 @@ class OpenPGPFile(list):
             if len(e_hex) % 2:
                 e_hex = "0{}".format(e_hex)
             result['e'] = e_hex
-            pem += "02{0:0{1}x}".format(e_numbytes, 2) + e_hex
+            pem += "0282{0:0{1}x}".format(e_numbytes, 4) + e_hex
 
             #pem format
             pem_seq = "3082{0:0{1}x}".format(len(pem) / 2, 4) + pem
