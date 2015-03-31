@@ -1095,9 +1095,12 @@ class OpenPGPFile(list):
         pubkey_result['tag_name'] = "Public-Subkey"
         return pubkey_result
 
-    def packetize(self, packet_tag, packet_start, packet_len):
+    def read_packets(self):
         """
+        Specification:
+        https://tools.ietf.org/html/rfc4880#section-4.2
         https://tools.ietf.org/html/rfc4880#section-4.3
+
         Packet tag ids:
         0        -- Reserved - a packet tag MUST NOT have this value
         1        -- Public-Key Encrypted Session Key Packet
@@ -1117,87 +1120,8 @@ class OpenPGPFile(list):
         17       -- User Attribute Packet
         18       -- Sym. Encrypted and Integrity Protected Data Packet
         19       -- Modification Detection Code Packet
-        60 to 63 -- Private or Experimental Values"""
-
-        #TODO: Public-Key Encrypted Session Key Packet
-        if packet_tag == 1:
-            raise NotImplementedError("Public-Key Encrypted Session Key Packet is not implemented yet :(")
-
-        #Signature Packet
-        elif packet_tag == 2:
-            return self.read_signature(packet_start, packet_len)
-
-        #TODO: Symmetric-Key Encrypted Session Key Packet
-        elif packet_tag == 3:
-            raise NotImplementedError("Symmetric-Key Encrypted Session Key Packet is not implemented yet :(")
-
-        #TODO: One-Pass Signature Packet
-        elif packet_tag == 4:
-            raise NotImplementedError("One-Pass Signature Packet is not implemented yet :(")
-
-        #TODO: Secret-Key Packet
-        elif packet_tag == 5:
-            raise NotImplementedError("Secret-Key Packet is not implemented yet :(")
-
-        #Public-Key Packet
-        elif packet_tag == 6:
-            return self.read_pubkey(packet_start, packet_len)
-
-        #TODO: Secret-Subkey Packet
-        elif packet_tag == 7:
-            raise NotImplementedError("Secret-Subkey Packet is not implemented yet :(")
-
-        #TODO: Compressed Data Packet
-        elif packet_tag == 8:
-            raise NotImplementedError("Compressed Data Packet is not implemented yet :(")
-
-        #TODO: Symmetrically Encrypted Data Packet
-        elif packet_tag == 9:
-            raise NotImplementedError("Symmetrically Encrypted Data Packet is not implemented yet :(")
-
-        #TODO: Marker Packet
-        elif packet_tag == 10:
-            raise NotImplementedError("Marker Packet is not implemented yet :(")
-
-        #TODO: Literal Data Packet
-        elif packet_tag == 11:
-            raise NotImplementedError("Literal Data Packet is not implemented yet :(")
-
-        #TODO: Trust Packet
-        elif packet_tag == 12:
-            raise NotImplementedError("Trust Packet is not implemented yet :(")
-
-        #User ID Packet
-        elif packet_tag == 13:
-            return self.read_userid(packet_start, packet_len)
-
-        #Public-Subkey Packet
-        elif packet_tag == 14:
-            return self.read_pubsubkey(packet_start, packet_len)
-
-        #TODO: User Attribute Packet
-        elif packet_tag == 17:
-            raise NotImplementedError("User Attribute Packet is not implemented yet :(")
-
-        #TODO: Sym. Encrypted and Integrity Protected Data Packet
-        elif packet_tag == 18:
-            raise NotImplementedError("Sym. Encrypted and Integrity Protected Data Packet is not implemented yet :(")
-
-        #TODO: Modification Detection Code Packet
-        elif packet_tag == 19:
-            raise NotImplementedError("Modification Detection Code Packet is not implemented yet :(")
-
-        #TODO: Private or Experimental Values
-        elif packet_tag in [60, 61, 62, 63]:
-            raise NotImplementedError("Private or Experimental Values are not implemented yet :(")
-
-        #all other packet tags are invalid
-        else:
-            raise ValueError("Invalid packet tag ({}).".format(packet_tag))
-
-
-    def read_packets(self):
-        """https://tools.ietf.org/html/rfc4880#section-4.2"""
+        60 to 63 -- Private or Experimental Values
+        """
 
         #get the file length
         self.rawfile.seek(0, os.SEEK_END)
@@ -1277,8 +1201,84 @@ class OpenPGPFile(list):
 
             #get the packet bytes
             i = self.rawfile.tell()
-            parsed_packet = self.packetize(packet_tag, i, packet_len)
-            self.append(parsed_packet)
+
+            #TODO: Public-Key Encrypted Session Key Packet
+            if packet_tag == 1:
+                raise NotImplementedError("Public-Key Encrypted Session Key Packet is not implemented yet :(")
+
+            #Signature Packet
+            elif packet_tag == 2:
+                packet_dict = self.read_signature(i, packet_len)
+
+            #TODO: Symmetric-Key Encrypted Session Key Packet
+            elif packet_tag == 3:
+                raise NotImplementedError("Symmetric-Key Encrypted Session Key Packet is not implemented yet :(")
+
+            #TODO: One-Pass Signature Packet
+            elif packet_tag == 4:
+                raise NotImplementedError("One-Pass Signature Packet is not implemented yet :(")
+
+            #TODO: Secret-Key Packet
+            elif packet_tag == 5:
+                raise NotImplementedError("Secret-Key Packet is not implemented yet :(")
+
+            #Public-Key Packet
+            elif packet_tag == 6:
+                packet_dict = self.read_pubkey(i, packet_len)
+
+            #TODO: Secret-Subkey Packet
+            elif packet_tag == 7:
+                raise NotImplementedError("Secret-Subkey Packet is not implemented yet :(")
+
+            #TODO: Compressed Data Packet
+            elif packet_tag == 8:
+                raise NotImplementedError("Compressed Data Packet is not implemented yet :(")
+
+            #TODO: Symmetrically Encrypted Data Packet
+            elif packet_tag == 9:
+                raise NotImplementedError("Symmetrically Encrypted Data Packet is not implemented yet :(")
+
+            #TODO: Marker Packet
+            elif packet_tag == 10:
+                raise NotImplementedError("Marker Packet is not implemented yet :(")
+
+            #TODO: Literal Data Packet
+            elif packet_tag == 11:
+                raise NotImplementedError("Literal Data Packet is not implemented yet :(")
+
+            #TODO: Trust Packet
+            elif packet_tag == 12:
+                raise NotImplementedError("Trust Packet is not implemented yet :(")
+
+            #User ID Packet
+            elif packet_tag == 13:
+                packet_dict = self.read_userid(i, packet_len)
+
+            #Public-Subkey Packet
+            elif packet_tag == 14:
+                packet_dict = self.read_pubsubkey(i, packet_len)
+
+            #TODO: User Attribute Packet
+            elif packet_tag == 17:
+                raise NotImplementedError("User Attribute Packet is not implemented yet :(")
+
+            #TODO: Sym. Encrypted and Integrity Protected Data Packet
+            elif packet_tag == 18:
+                raise NotImplementedError("Sym. Encrypted and Integrity Protected Data Packet is not implemented yet :(")
+
+            #TODO: Modification Detection Code Packet
+            elif packet_tag == 19:
+                raise NotImplementedError("Modification Detection Code Packet is not implemented yet :(")
+
+            #TODO: Private or Experimental Values
+            elif packet_tag in [60, 61, 62, 63]:
+                raise NotImplementedError("Private or Experimental Values are not implemented yet :(")
+
+            #all other packet tags are invalid
+            else:
+                raise ValueError("Invalid packet tag ({}).".format(packet_tag))
+
+            self.append(packet_dict)
 
             #iterate to the next packet header
             i += packet_len
