@@ -15,6 +15,7 @@ class OpenPGPFile(list):
             #standard packet values
             "tag_id": 2,
             "tag_name": "Signature",
+            "packet_format": 0 or 1,
             "start": 0,
             "len": 423,
 
@@ -156,7 +157,7 @@ class OpenPGPFile(list):
             #RSA specific (algo_ids 1, 3)
             "signature": "deadbeefdeadbeef",
 
-            #DSA and ECDSA specific (algo_ids 17, 19)
+            #DSA and ECDSA specific (algo_id 17)
             "signature_r": "deadbeefdeadbeef",
             "signature_s": "deadbeefdeadbeef",
 
@@ -617,7 +618,7 @@ class OpenPGPFile(list):
 
                 #Features (only first bit is defined)
                 elif type_id == 30:
-                    modification_detection = ord(self.rawfile.read(1)) & 0x80 == 0x80
+                    modification_detection = ord(self.rawfile.read(1)) & 0x01 == 0x01
                     subpacket['modification_detection'] = modification_detection
 
                 #Signature Target
@@ -655,13 +656,11 @@ class OpenPGPFile(list):
             sig_int = int(sig_bytes.encode('hex'), 16)
             if sig_int >> sig_len != 0:
                 raise ValueError("RSA signature has non-zero leading bits.")
-            sig_hex = "{0:x}".format(sig_int)
-            if len(sig_hex) % 2:
-                sig_hex = "0{}".format(sig_hex)
+            sig_hex = "{0:0{1}x}".format(sig_int, sig_numbytes * 2)
             result['signature'] = sig_hex
 
         #DSA signature
-        elif pubkey_algo_id in [1, 3]:
+        elif pubkey_algo_id == 17:
 
             #DSA value r
             r_len_bytes = self.rawfile.read(2)
@@ -671,9 +670,7 @@ class OpenPGPFile(list):
             r_int = int(r_bytes.encode('hex'), 16)
             if r_int >> r_len != 0:
                 raise ValueError("DSA signature r has non-zero leading bits.")
-            r_hex = "{0:x}".format(r_int)
-            if len(r_hex) % 2:
-                r_hex = "0{}".format(r_hex)
+            r_hex = "{0:0{1}x}".format(r_int, r_numbytes * 2)
             result['signature_r'] = r_hex
 
             #DSA value s
@@ -684,10 +681,8 @@ class OpenPGPFile(list):
             s_int = int(s_bytes.encode('hex'), 16)
             if s_int >> s_len != 0:
                 raise ValueError("DSA signature s has non-zero leading bits.")
-            s_hex = "{0:x}".format(s_int)
-            if len(s_hex) % 2:
-                s_hex = "0{}".format(s_hex)
-            result['signature_r'] = s_hex
+            s_hex = "{0:0{1}x}".format(s_int, s_numbytes * 2)
+            result['signature_s'] = s_hex
 
         #binary data document data
         if signature_type_name == "Signature of a binary document":
@@ -867,6 +862,219 @@ class OpenPGPFile(list):
 
         return result
 
+    def generate_signature(self, p):
+
+        #version
+        bytes = "{0:0{1}x}".format(p['version'], 2).decode("hex")
+
+        #signature body length (version 3 only)
+        if p['version'] == 3:
+            bytes += "{0:0{1}x}".format(5, 2).decode("hex")
+
+        #signature type
+        bytes += "{0:0{1}x}".format(p['signature_type_id'], 2).decode("hex")
+
+        #creation time (version 3 only)
+        if p['version'] == 3:
+            bytes += "{0:0{1}x}".format(p['creation_time'], 4).decode("hex")
+
+        #signer key_id (version 3 only)
+        if p['version'] == 3:
+            bytes += p['key_id'].decode("hex")
+
+        #public key algorithm
+        bytes += "{0:0{1}x}".format(p['pubkey_algo_id'], 2).decode("hex")
+
+        #hash algorithm
+        bytes += "{0:0{1}x}".format(p['hash_algo_id'], 2).decode("hex")
+
+        #subpackts (version 4 only)
+        if p['version'] == 4:
+
+            #generate bytes for each subpacket
+            hashed_subpackets = ""
+            unhashed_subpackets = ""
+            for sp in p['subpackets']:
+
+                #Signature Creation Time
+                if sp['type_id'] == 2:
+                    sp_bytes = "{0:0{1}x}".format(sp['creation_time'], 8).decode("hex")
+
+                #Signature Expiration Time
+                elif sp['type_id'] == 3:
+                    sp_bytes = "{0:0{1}x}".format(sp['expiration_time'], 8).decode("hex")
+
+                #Exportable Certification
+                elif sp['type_id'] == 4:
+                    sp_bytes = "\x01" if sp['exportable'] else "\x00"
+
+                #Trust Signature
+                elif sp['type_id'] == 5:
+                    sp_bytes = "{0:0{1}x}".format(sp['level'], 2).decode("hex")
+                    sp_bytes += "{0:0{1}x}".format(sp['amount'], 2).decode("hex")
+
+                #Regular Expression
+                elif sp['type_id'] == 6:
+                    sp_bytes = sp['regex']
+
+                #Revocable
+                elif sp['type_id'] == 7:
+                    sp_bytes = "\x01" if sp['revocable'] else "\x00"
+
+                #Key Expiration Time
+                elif sp['type_id'] == 9:
+                    sp_bytes = "{0:0{1}x}".format(sp['expiration_time'], 8).decode("hex")
+
+                #Preferred Symmetric Algorithms
+                elif sp['type_id'] == 11:
+                    sp_bytes = ""
+                    for a in sp['algos']:
+                        sp_bytes += "{0:0{1}x}".format(a, 2).decode("hex")
+
+                #Revocation Key
+                elif sp['type_id'] == 12:
+                    sp_bytes = "\xc0" if sp['sensitive'] else "\x80"
+                    sp_bytes += "{0:0{1}x}".format(sp['pubkey_algo'], 2).decode("hex")
+                    sp_bytes += "{0:0{1}x}".format(sp['fingerprint'], 40).decode("hex")
+
+                #Issuer
+                elif sp['type_id'] == 16:
+                    sp_bytes = sp['key_id'].decode("hex")
+
+                #Notation Data
+                elif sp['type_id'] == 20:
+                    sp_bytes = "\x80\x00\x00\x00" if sp['human_readable'] else "\x00\x00\x00\x00"
+                    sp_bytes += "{0:0{1}x}".format(len(sp['name']), 4).decode("hex")
+                    sp_bytes += "{0:0{1}x}".format(len(sp['value']), 4).decode("hex")
+                    sp_bytes += sp['name']
+                    sp_bytes += sp['value']
+
+                #Preferred Hash Algorithms
+                elif sp['type_id'] == 21:
+                    sp_bytes = ""
+                    for a in sp['algos']:
+                        sp_bytes += "{0:0{1}x}".format(a, 2).decode("hex")
+
+                #Preferred Compression Algorithms
+                elif sp['type_id'] == 22:
+                    sp_bytes = ""
+                    for a in sp['algos']:
+                        sp_bytes += "{0:0{1}x}".format(a, 2).decode("hex")
+
+                #Key Server Preferences (only first bit is defined)
+                elif sp['type_id'] == 23:
+                    sp_bytes = "\x80" if sp['no_modify'] else "\x00"
+
+                #Preferred Key Server
+                elif sp['type_id'] == 24:
+                    sp_bytes = sp['keyserver']
+
+                #Primary User ID
+                elif sp['type_id'] == 25:
+                    sp_bytes = "\x01" if sp['is_primary'] else "\x00"
+
+                #Policy URI
+                elif sp['type_id'] == 26:
+                    sp_bytes = sp['uri']
+
+                #Key Flags (only first octet has defined flags)
+                elif sp['type_id'] == 27:
+                    flags = 0
+                    flags |= 0x01 if sp['can_certify'] else 0x00
+                    flags |= 0x02 if sp['can_sign'] else 0x00
+                    flags |= 0x04 if sp['can_encrypt_communication'] else 0x00
+                    flags |= 0x08 if sp['can_encrypt_storage'] else 0x00
+                    flags |= 0x20 if sp['can_authenticate'] else 0x00
+                    flags |= 0x10 if sp['private_might_be_split'] else 0x00
+                    flags |= 0x80 if sp['private_might_be_shared'] else 0x00
+                    sp_bytes = "{0:0{1}x}".format(flags, 2).decode("hex")
+
+                #Signer's User ID
+                elif sp['type_id'] == 28:
+                    sp_bytes = sp['keyserver']
+
+                #Reason for Revocation
+                elif sp['type_id'] == 29:
+                    sp_bytes = "{0:0{1}x}".format(sp['code_id'], 2).decode("hex")
+                    sp_bytes += sp['reason']
+
+                #Features (only first bit is defined)
+                elif sp['type_id'] == 30:
+                    sp_bytes = "\x01" if sp['modification_detection'] else "\x00"
+
+                #Signature Target
+                elif sp['type_id'] == 31:
+                    sp_bytes = "{0:0{1}x}".format(sp['pubkey_algo'], 2).decode("hex")
+                    sp_bytes += "{0:0{1}x}".format(sp['hash_algo'], 2).decode("hex")
+                    sp_bytes += sp['hash'].decode("hex")
+
+                #Embedded Signature
+                elif sp['type_id'] == 32:
+                    sp_bytes = self.generate_signature(sp['signature'])
+
+                #calculate subpacket length
+                sp_header = ""
+                sp_len = len(sp_bytes) + 1
+
+                #one byte length
+                if sp_len < 192:
+                    sp_header += "{0:0{1}x}".format(sp_len, 2).decode("hex")
+
+                #two bytes length
+                elif sp_len >= 192 and sp_len <= 16575:
+                    octets = (sp_len - 192) | 0xC000
+                    sp_header += "{0:0{1}x}".format(octets, 4).decode("hex")
+
+                #five bytes length
+                elif sp_len > 16575:
+                    sp_header += "ff{0:0{1}x}".format(sp_len, 8).decode("hex")
+
+                #add type and critical flag
+                sp_type = sp['type_id']
+                if sp['critical']:
+                    sp_type |= 0x80
+                sp_header += "{0:0{1}x}".format(sp_type, 2).decode("hex")
+
+                #add to hashed or unhashed subpackets
+                if sp['hashed']:
+                    hashed_subpackets += sp_header + sp_bytes
+                else:
+                    unhashed_subpackets += sp_header + sp_bytes
+
+            #calculate lengths
+            hashed_len = "{0:0{1}x}".format(len(hashed_subpackets), 4).decode("hex")
+            unhashed_len = "{0:0{1}x}".format(len(unhashed_subpackets), 4).decode("hex")
+
+            bytes += hashed_len + hashed_subpackets
+            bytes += unhashed_len + unhashed_subpackets
+
+        #hash check
+        bytes += p['hash_check'].decode("hex")
+
+        #RSA signature
+        if p['pubkey_algo_id'] in [1, 3]:
+
+            #RSA signature value m**d mod n
+            sig_int = int(p['signature'], 16)
+            bytes += "{0:0{1}x}".format(sig_int.bit_length(), 4).decode("hex")
+            bytes += p['signature'].decode("hex")
+
+        #DSA signature
+        elif p['pubkey_algo_id'] == 17:
+
+            #DSA value r
+            r_int = int(p['signature_r'], 16)
+            bytes += "{0:0{1}x}".format(r_int.bit_length(), 4).decode("hex")
+            bytes += p['signature_r'].decode("hex")
+
+            #DSA value s
+            s_int = int(p['signature_s'], 16)
+            bytes += "{0:0{1}x}".format(s_int.bit_length(), 4).decode("hex")
+            bytes += p['signature_s'].decode("hex")
+
+        return bytes
+
+
     def read_pubkey(self, packet_start, packet_len):
         """
         Specifications:
@@ -986,9 +1194,7 @@ class OpenPGPFile(list):
             n_int = int(n_bytes.encode('hex'), 16)
             if n_int >> n_len != 0:
                 raise ValueError("RSA modulus has non-zero leading bits.")
-            n_hex = "{0:x}".format(n_int)
-            if len(n_hex) % 2:
-                n_hex = "0{}".format(n_hex)
+            n_hex = "{0:0{1}x}".format(n_int, n_numbytes * 2)
             result['n'] = n_hex
             pem = "0282{0:0{1}x}00".format(n_numbytes + 1, 4) + n_hex
 
@@ -1000,9 +1206,7 @@ class OpenPGPFile(list):
             e_int = int(e_bytes.encode('hex'), 16)
             if e_int >> e_len != 0:
                 raise ValueError("RSA exponent has non-zero leading bits.")
-            e_hex = "{0:x}".format(e_int)
-            if len(e_hex) % 2:
-                e_hex = "0{}".format(e_hex)
+            e_hex = "{0:0{1}x}".format(e_int, e_numbytes * 2)
             result['e'] = e_hex
             pem += "0282{0:0{1}x}".format(e_numbytes, 4) + e_hex
 
@@ -1059,6 +1263,55 @@ class OpenPGPFile(list):
 
         return result
 
+    def generate_pubkey(self, p):
+        #version
+        bytes = "{0:0{1}x}".format(p['version'], 2).decode("hex")
+
+        #creation time
+        bytes += "{0:0{1}x}".format(p['creation_time'], 8).decode("hex")
+
+        #valid days
+        if p['version'] == 3:
+            bytes += "{0:0{1}x}".format(p['valid_days'], 4).decode("hex")
+
+        #algo_id
+        bytes += "{0:0{1}x}".format(p['algo_id'], 2).decode("hex")
+
+        #RSA
+        if p['algo_id'] in [1, 2, 3]:
+
+            #modulus
+            modulus_int = int(p['n'], 16)
+            bytes += "{0:0{1}x}".format(modulus_int.bit_length(), 4).decode("hex")
+            bytes += p['n'].decode("hex")
+
+            #exponent
+            exponent_int = int(p['e'], 16)
+            bytes += "{0:0{1}x}".format(exponent_int.bit_length(), 4).decode("hex")
+            bytes += p['e'].decode("hex")
+
+        #Elgamal
+        elif p['algo_id'] in [16, 20]:
+            raise NotImplementedError("Elgamal public key parsing is not implemented yet :(")
+
+        #DSA
+        elif p['algo_id'] == 17:
+            raise NotImplementedError("DSA public key parsing is not implemented yet :(")
+
+        #ECDH
+        elif p['algo_id'] == 18:
+            raise NotImplementedError("ECDH public key parsing is not implemented yet :(")
+
+        #ECDSA
+        elif p['algo_id'] == 19:
+            raise NotImplementedError("ECDSA public key parsing is not implemented yet :(")
+
+        #DH
+        elif p['algo_id'] == 21:
+            raise NotImplementedError("DH public key parsing is not implemented yet :(")
+
+        return bytes
+
     def read_userid(self, packet_start, packet_len):
         """
         Specification:
@@ -1082,6 +1335,9 @@ class OpenPGPFile(list):
             "user_id": self.rawfile.read(packet_len),
         }
 
+    def generate_userid(self, p):
+        return p['user_id']
+
     def read_pubsubkey(self, packet_start, packet_len):
         """
         Specification:
@@ -1094,6 +1350,9 @@ class OpenPGPFile(list):
         pubkey_result['tag_id'] = 14
         pubkey_result['tag_name'] = "Public-Subkey"
         return pubkey_result
+
+    def generate_pubsubkey(self, p):
+        return self.generate_pubkey(p)
 
     def read_packets(self):
         """
@@ -1278,6 +1537,8 @@ class OpenPGPFile(list):
             else:
                 raise ValueError("Invalid packet tag ({}).".format(packet_tag))
 
+            #add packet format
+            packet_dict['packet_format'] = packet_format
             self.append(packet_dict)
 
             #iterate to the next packet header
@@ -1286,7 +1547,136 @@ class OpenPGPFile(list):
         #return the packets
         return self
 
+    def generate_packets(self):
+        bytes = ""
+        for i in xrange(0, len(self)):
+
+            #TODO: Public-Key Encrypted Session Key Packet
+            if self[i]['tag_id'] == 1:
+                raise NotImplementedError("Public-Key Encrypted Session Key Packet is not implemented yet :(")
+
+            #Signature Packet
+            elif self[i]['tag_id'] == 2:
+                packet_bytes = self.generate_signature(self[i])
+
+            #TODO: Symmetric-Key Encrypted Session Key Packet
+            elif self[i]['tag_id'] == 3:
+                raise NotImplementedError("Symmetric-Key Encrypted Session Key Packet is not implemented yet :(")
+
+            #TODO: One-Pass Signature Packet
+            elif self[i]['tag_id'] == 4:
+                raise NotImplementedError("One-Pass Signature Packet is not implemented yet :(")
+
+            #TODO: Secret-Key Packet
+            elif self[i]['tag_id'] == 5:
+                raise NotImplementedError("Secret-Key Packet is not implemented yet :(")
+
+            #Public-Key Packet
+            elif self[i]['tag_id'] == 6:
+                packet_bytes = self.generate_pubkey(self[i])
+
+            #TODO: Secret-Subkey Packet
+            elif self[i]['tag_id'] == 7:
+                raise NotImplementedError("Secret-Subkey Packet is not implemented yet :(")
+
+            #TODO: Compressed Data Packet
+            elif self[i]['tag_id'] == 8:
+                raise NotImplementedError("Compressed Data Packet is not implemented yet :(")
+
+            #TODO: Symmetrically Encrypted Data Packet
+            elif self[i]['tag_id'] == 9:
+                raise NotImplementedError("Symmetrically Encrypted Data Packet is not implemented yet :(")
+
+            #TODO: Marker Packet
+            elif self[i]['tag_id'] == 10:
+                raise NotImplementedError("Marker Packet is not implemented yet :(")
+
+            #TODO: Literal Data Packet
+            elif self[i]['tag_id'] == 11:
+                raise NotImplementedError("Literal Data Packet is not implemented yet :(")
+
+            #TODO: Trust Packet
+            elif self[i]['tag_id'] == 12:
+                raise NotImplementedError("Trust Packet is not implemented yet :(")
+
+            #User ID Packet
+            elif self[i]['tag_id'] == 13:
+                packet_bytes = self.generate_userid(self[i])
+
+            #Public-Subkey Packet
+            elif self[i]['tag_id'] == 14:
+                packet_bytes = self.generate_pubsubkey(self[i])
+
+            #TODO: User Attribute Packet
+            elif self[i]['tag_id'] == 17:
+                raise NotImplementedError("User Attribute Packet is not implemented yet :(")
+
+            #TODO: Sym. Encrypted and Integrity Protected Data Packet
+            elif self[i]['tag_id'] == 18:
+                raise NotImplementedError("Sym. Encrypted and Integrity Protected Data Packet is not implemented yet :(")
+
+            #TODO: Modification Detection Code Packet
+            elif self[i]['tag_id'] == 19:
+                raise NotImplementedError("Modification Detection Code Packet is not implemented yet :(")
+
+            #TODO: Private or Experimental Values
+            elif self[i]['tag_id'] in [60, 61, 62, 63]:
+                raise NotImplementedError("Private or Experimental Values are not implemented yet :(")
+
+            #all other packet tags are invalid
+            else:
+                raise ValueError("Invalid packet tag ({}).".format(self[i]['tag_id']))
+
+            #header bytes
+            header = ""
+            packet_len = len(packet_bytes)
+
+            #new packet format
+            if self[i]['packet_format'] == 1:
+                header_byte = 0x80 | 0x40 | self[i]['tag_id']
+                header += "{0:0{1}x}".format(header_byte, 2).decode("hex")
+
+                #one byte length
+                if packet_len < 192:
+                    header += "{0:0{1}x}".format(packet_len, 2).decode("hex")
+
+                #two bytes length
+                elif packet_len >= 192 and packet_len <= 8383:
+                    octets = (packet_len - 192) | 0xC000
+                    header += "{0:0{1}x}".format(octets, 4).decode("hex")
+
+                #five bytes length
+                elif packet_len > 8383:
+                    header += "ff{0:0{1}x}".format(packet_len, 8).decode("hex")
+
+            #old packet format
+            if self[i]['packet_format'] == 0:
+                header_byte = 0x80 | 0x00 | (self[i]['tag_id'] << 2)
+
+                #one byte length
+                if packet_len < 256:
+                    header_byte = header_byte | 0x00
+                    header += "{0:0{1}x}".format(header_byte, 2).decode("hex")
+                    header += "{0:0{1}x}".format(packet_len, 2).decode("hex")
+
+                #two bytes length
+                elif packet_len < 65535:
+                    header_byte = header_byte | 0x01
+                    header += "{0:0{1}x}".format(header_byte, 2).decode("hex")
+                    header += "{0:0{1}x}".format(packet_len, 4).decode("hex")
+
+                #four bytes length
+                else:
+                    header_byte = header_byte | 0x10
+                    header += "{0:0{1}x}".format(header_byte, 2).decode("hex")
+                    header += "{0:0{1}x}".format(packet_len, 8).decode("hex")
+
+            bytes += header + packet_bytes
+
+        return bytes
+
 if __name__ == "__main__":
     import json
-    print json.dumps(OpenPGPFile(open(sys.argv[1])), indent=4, sort_keys=True)
+    pgpfile = OpenPGPFile(open(sys.argv[1]))
+    print json.dumps(pgpfile, indent=4, sort_keys=True)
 
