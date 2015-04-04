@@ -13,11 +13,13 @@ class OpenPGPFile(list):
     Object format = [
         {
             #standard packet values
+            "packet_format": 0 or 1,
+            "packet_start": 123,
+            "packet_raw": "deadbeefdeadbeefdeadbeef...",
             "tag_id": 2,
             "tag_name": "Signature",
-            "packet_format": 0 or 1,
-            "start": 0,
-            "len": 423,
+            "body_start": 0,
+            "body_len": 423,
 
             #packet specific keys (see each read_* method for format)
             ...
@@ -32,7 +34,7 @@ class OpenPGPFile(list):
         self.rawfile = fileobj
         self.read_packets()
 
-    def read_signature(self, packet_start, packet_len, msg_body=""):
+    def read_signature(self, body_start, body_len, msg_body=""):
         """
         Specification:
         https://tools.ietf.org/html/rfc4880#section-5.2
@@ -139,8 +141,8 @@ class OpenPGPFile(list):
             #standard packet values
             "tag_id": 2,
             "tag_name": "Signature",
-            "start": 0,
-            "len": 123,
+            "body_start": 0,
+            "body_len": 123,
 
             #signature packet values
             "version": 3 or 4,
@@ -265,12 +267,12 @@ class OpenPGPFile(list):
         result = {
             "tag_id": 2,
             "tag_name": "Signature",
-            "start": packet_start,
-            "len": packet_len,
+            "body_start": body_start,
+            "body_len": body_len,
         }
 
         #version
-        self.rawfile.seek(packet_start)
+        self.rawfile.seek(body_start)
         version = ord(self.rawfile.read(1))
         if version not in [3, 4]:
             result['error'] = True
@@ -768,8 +770,8 @@ class OpenPGPFile(list):
             i = len(self) - 1
             while i >= 0:
                 if self[i]['tag_name'] == "Literal Data":
-                    self.rawfile.seek(self[i]['start'])
-                    msg_body = self.rawfile.read(self[i]['len'])
+                    self.rawfile.seek(self[i]['body_start'])
+                    msg_body = self.rawfile.read(self[i]['body_len'])
                     break
                 i = i - 1
 
@@ -779,8 +781,8 @@ class OpenPGPFile(list):
             i = len(self) - 1
             while i >= 0:
                 if self[i]['tag_name'] == "Literal Data":
-                    self.rawfile.seek(self[i]['start'])
-                    msg_body = self.rawfile.read(self[i]['len'])
+                    self.rawfile.seek(self[i]['body_start'])
+                    msg_body = self.rawfile.read(self[i]['body_len'])
                     break
                 i = i - 1
             #convert linebreaks to \r\n
@@ -793,10 +795,10 @@ class OpenPGPFile(list):
             i = len(self) - 1
             while i >= 0:
                 if self[i]['tag_name'] == "Public-Key":
-                    self.rawfile.seek(self[i]['start'])
+                    self.rawfile.seek(self[i]['body_start'])
                     prefix = "\x99"
-                    len_octets = "{0:0{1}x}".format(self[i]['len'], 4).decode("hex")
-                    msg_body = prefix + len_octets + self.rawfile.read(self[i]['len'])
+                    len_octets = "{0:0{1}x}".format(self[i]['body_len'], 4).decode("hex")
+                    msg_body = prefix + len_octets + self.rawfile.read(self[i]['body_len'])
                     break
                 i = i - 1
 
@@ -812,10 +814,10 @@ class OpenPGPFile(list):
             i = len(self) - 1
             while i >= 0:
                 if self[i]['tag_name'] == "Public-Key":
-                    self.rawfile.seek(self[i]['start'])
+                    self.rawfile.seek(self[i]['body_start'])
                     prefix = "\x99"
-                    len_octets = "{0:0{1}x}".format(self[i]['len'], 4).decode("hex")
-                    msg_body = prefix + len_octets + self.rawfile.read(self[i]['len'])
+                    len_octets = "{0:0{1}x}".format(self[i]['body_len'], 4).decode("hex")
+                    msg_body = prefix + len_octets + self.rawfile.read(self[i]['body_len'])
                     break
                 i = i - 1
 
@@ -834,10 +836,10 @@ class OpenPGPFile(list):
                     #version 4 prefix (0xB4)
                     elif version == 4:
                         prefix = "\xb4"
-                        len_octets = "{0:0{1}x}".format(self[i]['len'], 8).decode("hex")
+                        len_octets = "{0:0{1}x}".format(self[i]['body_len'], 8).decode("hex")
 
-                    self.rawfile.seek(self[i]['start'])
-                    msg_body += prefix + len_octets + self.rawfile.read(self[i]['len'])
+                    self.rawfile.seek(self[i]['body_start'])
+                    msg_body += prefix + len_octets + self.rawfile.read(self[i]['body_len'])
                     break
 
                 #user attribute packet
@@ -851,10 +853,10 @@ class OpenPGPFile(list):
                     #version 4 prefix (0xD1)
                     elif version == 4:
                         prefix = "\xd1"
-                        len_octets = "{0:0{1}x}".format(self[i]['len'], 8).decode("hex")
+                        len_octets = "{0:0{1}x}".format(self[i]['body_len'], 8).decode("hex")
 
-                    self.rawfile.seek(self[i]['start'])
-                    msg_body += prefix + len_octets + self.rawfile.read(self[i]['len'])
+                    self.rawfile.seek(self[i]['body_start'])
+                    msg_body += prefix + len_octets + self.rawfile.read(self[i]['body_len'])
                     break
 
                 i = i - 1
@@ -866,10 +868,10 @@ class OpenPGPFile(list):
             i = len(self) - 1
             while i >= 0:
                 if self[i]['tag_name'] == "Public-Key":
-                    self.rawfile.seek(self[i]['start'])
+                    self.rawfile.seek(self[i]['body_start'])
                     prefix = "\x99"
-                    len_octets = "{0:0{1}x}".format(self[i]['len'], 4).decode("hex")
-                    msg_body = prefix + len_octets + self.rawfile.read(self[i]['len'])
+                    len_octets = "{0:0{1}x}".format(self[i]['body_len'], 4).decode("hex")
+                    msg_body = prefix + len_octets + self.rawfile.read(self[i]['body_len'])
                     break
                 i = i - 1
 
@@ -877,10 +879,10 @@ class OpenPGPFile(list):
             i = len(self) - 1
             while i >= 0:
                 if self[i]['tag_name'] == "Public-Subkey":
-                    self.rawfile.seek(self[i]['start'])
+                    self.rawfile.seek(self[i]['body_start'])
                     prefix = "\x99"
-                    len_octets = "{0:0{1}x}".format(self[i]['len'], 4).decode("hex")
-                    msg_body += prefix + len_octets + self.rawfile.read(self[i]['len'])
+                    len_octets = "{0:0{1}x}".format(self[i]['body_len'], 4).decode("hex")
+                    msg_body += prefix + len_octets + self.rawfile.read(self[i]['body_len'])
                     break
                 i = i - 1
 
@@ -891,10 +893,10 @@ class OpenPGPFile(list):
             i = len(self) - 1
             while i >= 0:
                 if self[i]['tag_name'] == "Public-Key":
-                    self.rawfile.seek(self[i]['start'])
+                    self.rawfile.seek(self[i]['body_start'])
                     prefix = "\x99"
-                    len_octets = "{0:0{1}x}".format(self[i]['len'], 4).decode("hex")
-                    msg_body = prefix + len_octets + self.rawfile.read(self[i]['len'])
+                    len_octets = "{0:0{1}x}".format(self[i]['body_len'], 4).decode("hex")
+                    msg_body = prefix + len_octets + self.rawfile.read(self[i]['body_len'])
                     break
                 i = i - 1
 
@@ -905,10 +907,10 @@ class OpenPGPFile(list):
             i = len(self) - 1
             while i >= 0:
                 if self[i]['tag_name'] == "Public-Subkey":
-                    self.rawfile.seek(self[i]['start'])
+                    self.rawfile.seek(self[i]['body_start'])
                     prefix = "\x99"
-                    len_octets = "{0:0{1}x}".format(self[i]['len'], 4).decode("hex")
-                    msg_body = prefix + len_octets + self.rawfile.read(self[i]['len'])
+                    len_octets = "{0:0{1}x}".format(self[i]['body_len'], 4).decode("hex")
+                    msg_body = prefix + len_octets + self.rawfile.read(self[i]['body_len'])
                     break
                 i = i - 1
 
@@ -917,8 +919,8 @@ class OpenPGPFile(list):
             trailer = "{0:0{1}x}".format(result['signature_type_id'], 2).decode("hex")
             trailer += "{0:0{1}x}".format(result['creation_time'], 8).decode("hex")
         elif version == 4:
-            hash_len = hashed_subpacket_end - packet_start
-            self.rawfile.seek(packet_start)
+            hash_len = hashed_subpacket_end - body_start
+            self.rawfile.seek(body_start)
             trailer = self.rawfile.read(hash_len)
             trailer += "\x04\xff"
             trailer += "{0:0{1}x}".format(hash_len, 8).decode("hex")
@@ -1174,7 +1176,7 @@ class OpenPGPFile(list):
         return bytes
 
 
-    def read_pubkey(self, packet_start, packet_len):
+    def read_pubkey(self, body_start, body_len):
         """
         Specifications:
         https://tools.ietf.org/html/rfc4880#section-5.5.1.1
@@ -1200,8 +1202,8 @@ class OpenPGPFile(list):
             #standard packet values
             "tag_id": 6,
             "tag_name": "Public-Key",
-            "start": 0,
-            "len": 123,
+            "body_start": 0,
+            "body_len": 123,
 
             #public key packet values
             "key_id": "deadbeefdeadbeef",
@@ -1239,18 +1241,17 @@ class OpenPGPFile(list):
         result = {
             "tag_id": 6,
             "tag_name": "Public-Key",
-            "start": packet_start,
-            "len": packet_len,
+            "body_start": body_start,
+            "body_len": body_len,
         }
 
         #version
-        self.rawfile.seek(packet_start)
+        self.rawfile.seek(body_start)
         version = ord(self.rawfile.read(1))
         if version not in [3, 4]:
             result['error'] = True
             result['error_msg'] = "Public Key version is invalid ({}).".format(version)
             return result
-            #raise ValueError("Public Key version is invalid ({}).".format(version))
         result['version'] = version
 
         #creation date
@@ -1473,12 +1474,14 @@ class OpenPGPFile(list):
             #KDF parameters
             kdf_len = ord(self.rawfile.read(1))
             kdf_version = ord(self.rawfile.read(1))
-            if kdf_version != 1:
-                raise ValueError("ECDH version ({}) is not 1.".format(kdf_version))
-            kdf_hash_id = ord(self.rawfile.read(1))
-            kdf_algo_id = ord(self.rawfile.read(1))
-            result['kdf_hash_id'] = kdf_hash_id
-            result['kdf_algo_id'] = kdf_algo_id
+            if kdf_version == 1:
+                kdf_hash_id = ord(self.rawfile.read(1))
+                kdf_algo_id = ord(self.rawfile.read(1))
+                result['kdf_hash_id'] = kdf_hash_id
+                result['kdf_algo_id'] = kdf_algo_id
+            else:
+                result['error'] = True
+                result['error_msg'] = "ECDH version ({}) is not 1.".format(kdf_version)
 
             #TODO: Make real pem bytes
             pem_bytes = "\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff"
@@ -1500,7 +1503,9 @@ class OpenPGPFile(list):
                     "2b240303020801010d": "brainpoolP512r1",
                 }[oid.encode("hex")]
             except KeyError:
-                raise ValueError("ECDSA has unknown curve OID ('{}').".format(oid.encode("hex")))
+                curve_name = "Unknown"
+                result['error'] = True
+                result['error_msg'] = "ECDSA has unknown curve OID ('{}').".format(oid.encode("hex"))
             result['oid'] = oid
             result['curve_name'] = curve_name
 
@@ -1539,7 +1544,9 @@ class OpenPGPFile(list):
                     "2b06010401da470f01": "Ed25519",
                 }[oid.encode("hex")]
             except KeyError:
-                raise ValueError("EdDSA has unknown curve OID ('{}').".format(oid.encode("hex")))
+                curve_name = "Unknown"
+                result['error'] = True
+                result['error_msg'] = "EdDSA has unknown curve OID ('{}').".format(oid.encode("hex"))
             result['oid'] = oid
             result['curve_name'] = curve_name
 
@@ -1572,7 +1579,9 @@ class OpenPGPFile(list):
 
         #reject all other algorithms
         else:
-            raise ValueError("Public Key algorithm is invalid ({}).".format(algo_id))
+            pem_bytes = None
+            result['error'] = True
+            result['error_msg'] = "Public Key algorithm is invalid ({}).".format(algo_id)
 
         #pem file
         if pem_bytes:
@@ -1594,9 +1603,9 @@ class OpenPGPFile(list):
 
         #fingerprint (version 4)
         elif version == 4:
-            self.rawfile.seek(packet_start)
-            len_hex = "{0:0{1}x}".format(packet_len, 4).decode("hex")
-            body = "\x99{}{}".format(len_hex, self.rawfile.read(packet_len))
+            self.rawfile.seek(body_start)
+            len_hex = "{0:0{1}x}".format(body_len, 4).decode("hex")
+            body = "\x99{}{}".format(len_hex, self.rawfile.read(body_len))
             result['fingerprint'] = hashlib.sha1(body).hexdigest()
             result['key_id'] = result['fingerprint'][-16:]
 
@@ -1651,7 +1660,7 @@ class OpenPGPFile(list):
 
         return bytes
 
-    def read_pubsubkey(self, packet_start, packet_len):
+    def read_pubsubkey(self, body_start, body_len):
         """
         Specification:
         https://tools.ietf.org/html/rfc4880#section-5.5.1.2
@@ -1659,7 +1668,7 @@ class OpenPGPFile(list):
         Return Format:
         Same as read_pubkey, except tag_id is 14 and tag_name is "Public-Subkey"
         """
-        pubkey_result = self.read_pubkey(packet_start, packet_len)
+        pubkey_result = self.read_pubkey(body_start, body_len)
         pubkey_result['tag_id'] = 14
         pubkey_result['tag_name'] = "Public-Subkey"
         return pubkey_result
@@ -1667,7 +1676,7 @@ class OpenPGPFile(list):
     def generate_pubsubkey(self, p):
         return self.generate_pubkey(p)
 
-    def read_userid(self, packet_start, packet_len):
+    def read_userid(self, body_start, body_len):
         """
         Specification:
         https://tools.ietf.org/html/rfc4880#section-5.11
@@ -1676,24 +1685,24 @@ class OpenPGPFile(list):
         {
             "tag_id": 6,
             "tag_name": "User ID",
-            "start": 0,
-            "len": 123,
+            "body_start": 0,
+            "body_len": 123,
             "user_id": "John Doe (johndoe1234) <john.doe@example.com>",
         }
         """
-        self.rawfile.seek(packet_start)
+        self.rawfile.seek(body_start)
         return {
             "tag_id": 13,
             "tag_name": "User ID",
-            "start": packet_start,
-            "len": packet_len,
-            "user_id": self.rawfile.read(packet_len),
+            "body_start": body_start,
+            "body_len": body_len,
+            "user_id": self.rawfile.read(body_len),
         }
 
     def generate_userid(self, p):
         return p['user_id']
 
-    def read_attribute(self, packet_start, packet_len):
+    def read_attribute(self, body_start, body_len):
         """
         Specification:
         https://tools.ietf.org/html/rfc4880#section-5.12
@@ -1702,8 +1711,8 @@ class OpenPGPFile(list):
         {
             "tag_id": 17,
             "tag_name": "User Attribute",
-            "start": 0,
-            "len": 123,
+            "body_start": 0,
+            "body_len": 123,
             "subpackets": [
                 {
                     "type_id": 1,
@@ -1719,29 +1728,29 @@ class OpenPGPFile(list):
         result = {
             "tag_id": 17,
             "tag_name": "User Attribute",
-            "start": packet_start,
-            "len": packet_len,
+            "body_start": body_start,
+            "body_len": body_len,
             "subpackets": [],
         }
 
         #read the user attribute subpackets
-        self.rawfile.seek(packet_start)
-        while self.rawfile.tell() < (packet_start + packet_len):
+        self.rawfile.seek(body_start)
+        while self.rawfile.tell() < (body_start + body_len):
 
             #one byte length
             first_octet = ord(self.rawfile.read(1))
             if first_octet < 192:
-                packet_len = first_octet
+                subpacket_len = first_octet
 
             #two bytes length
             elif first_octet >= 192 and first_octet < 255:
                 second_octet = ord(self.rawfile.read(1))
-                packet_len = ((first_octet - 192) << 8) + second_octet + 192
+                subpacket_len = ((first_octet - 192) << 8) + second_octet + 192
 
             #four bytes length
             elif first_octet == 255:
                 four_bytes = self.rawfile.read(4)
-                packet_len = int(four_bytes.encode('hex'), 16)
+                subpacket_len = int(four_bytes.encode('hex'), 16)
 
             #subpacket type
             type_id = ord(self.rawfile.read(1))
@@ -1786,7 +1795,10 @@ class OpenPGPFile(list):
                 #get the header version
                 header_version = ord(self.rawfile.read(1))
                 if header_version != 1:
-                    raise ValueError("Image header version is invalid ({}).".format(header_version))
+                    result['error'] = True
+                    result['error_msg'] = "Image header version is invalid ({}).".format(header_version)
+                    subpacket['error'] = True
+                    subpacket['error_msg'] = "Image header version is invalid ({}).".format(header_version)
                 subpacket['version'] = header_version
 
                 #get image encoding
@@ -1810,7 +1822,7 @@ class OpenPGPFile(list):
                     result['error_msg'] = "Image header remainder contains non-zero values."
 
                 #the rest of the subpacket is the image
-                subpacket['image'] = self.rawfile.read(packet_len - header_len)
+                subpacket['image'] = self.rawfile.read(subpacket_len - header_len)
 
             result['subpackets'].append(subpacket)
 
@@ -1862,6 +1874,7 @@ class OpenPGPFile(list):
 
             #OpenPGP packet header byte
             self.rawfile.seek(i)
+            packet_start = i
             packet_header = ord(self.rawfile.read(1))
 
             #Bit 7 = packet header (must be 1)
@@ -1881,17 +1894,17 @@ class OpenPGPFile(list):
                 #one byte length
                 first_octet = ord(self.rawfile.read(1))
                 if first_octet < 192:
-                    packet_len = first_octet
+                    body_len = first_octet
 
                 #two bytes length
                 elif first_octet >= 192 and first_octet <= 223:
                     second_octet = ord(self.rawfile.read(1))
-                    packet_len = ((first_octet - 192) << 8) + second_octet + 192
+                    body_len = ((first_octet - 192) << 8) + second_octet + 192
 
                 #four bytes length
                 elif first_octet == 255:
                     four_bytes = self.rawfile.read(4)
-                    packet_len = int(four_bytes.encode('hex'), 16)
+                    body_len = int(four_bytes.encode('hex'), 16)
 
             #old packet format
             elif packet_format == 0:
@@ -1906,22 +1919,22 @@ class OpenPGPFile(list):
                 if packet_lentype == 0:
                     #one byte length
                     lenbytes = self.rawfile.read(1)
-                    packet_len = ord(lenbytes)
+                    body_len = ord(lenbytes)
 
                 elif packet_lentype == 1:
                     #two bytes length
                     lenbytes = self.rawfile.read(2)
-                    packet_len = int(lenbytes.encode('hex'), 16)
+                    body_len = int(lenbytes.encode('hex'), 16)
 
                 elif packet_lentype == 2:
                     #four bytes length
                     lenbytes = self.rawfile.read(4)
-                    packet_len = int(lenbytes.encode('hex'), 16)
+                    body_len = int(lenbytes.encode('hex'), 16)
 
                 elif packet_lentype == 3:
                     #indeterminate length (i.e. to end of file)
                     self.rawfile.seek(0, os.SEEK_END)
-                    packet_len = self.rawfile.tell() - i - 1
+                    body_len = self.rawfile.tell() - i - 1
                     self.rawfile.seek(i + 1)
 
             #get the packet bytes
@@ -1933,7 +1946,7 @@ class OpenPGPFile(list):
 
             #Signature Packet
             elif packet_tag == 2:
-                packet_dict = self.read_signature(i, packet_len)
+                packet_dict = self.read_signature(i, body_len)
 
             #TODO: Symmetric-Key Encrypted Session Key Packet
             elif packet_tag == 3:
@@ -1949,7 +1962,7 @@ class OpenPGPFile(list):
 
             #Public-Key Packet
             elif packet_tag == 6:
-                packet_dict = self.read_pubkey(i, packet_len)
+                packet_dict = self.read_pubkey(i, body_len)
 
             #TODO: Secret-Subkey Packet
             elif packet_tag == 7:
@@ -1977,15 +1990,15 @@ class OpenPGPFile(list):
 
             #User ID Packet
             elif packet_tag == 13:
-                packet_dict = self.read_userid(i, packet_len)
+                packet_dict = self.read_userid(i, body_len)
 
             #Public-Subkey Packet
             elif packet_tag == 14:
-                packet_dict = self.read_pubsubkey(i, packet_len)
+                packet_dict = self.read_pubsubkey(i, body_len)
 
             #User Attribute Packet
             elif packet_tag == 17:
-                packet_dict = self.read_attribute(i, packet_len)
+                packet_dict = self.read_attribute(i, body_len)
 
             #TODO: Sym. Encrypted and Integrity Protected Data Packet
             elif packet_tag == 18:
@@ -2004,11 +2017,16 @@ class OpenPGPFile(list):
                 raise ValueError("Invalid packet tag ({}).".format(packet_tag))
 
             #add packet format
+            packet_len = i + body_len - packet_start
             packet_dict['packet_format'] = packet_format
+            packet_dict['packet_start'] = packet_start
+            packet_dict['packet_len'] = packet_len
+            self.rawfile.seek(packet_start)
+            packet_dict['packet_raw'] = self.rawfile.read(packet_len).encode("hex")
             self.append(packet_dict)
 
             #iterate to the next packet header
-            i += packet_len
+            i += body_len
 
         #return the packets
         return self
