@@ -273,7 +273,10 @@ class OpenPGPFile(list):
         self.rawfile.seek(packet_start)
         version = ord(self.rawfile.read(1))
         if version not in [3, 4]:
-            raise ValueError("Signature version is invalid ({}).".format(version))
+            result['error'] = True
+            result['error_msg'] = "Signature version is invalid ({}).".format(version)
+            return result
+            #raise ValueError("Signature version is invalid ({}).".format(version))
         result['version'] = version
 
         #signature body length (version 3 only)
@@ -293,14 +296,14 @@ class OpenPGPFile(list):
                 17: "Persona certification",
                 18: "Casual certification",
                 19: "Positive certification",
-                24: "Subkey Binding Signature",
-                25: "Primary Key Binding Signature",
+                24: "Subkey Binding",
+                25: "Primary Key Binding",
                 31: "Signature directly on a key",
-                32: "Key revocation signature",
-                40: "Subkey revocation signature",
-                48: "Certification revocation signature",
-                64: "Timestamp signature",
-                80: "Third-Party Confirmation signature",
+                32: "Key revocation",
+                40: "Subkey revocation",
+                48: "Certification revocation",
+                64: "Timestamp",
+                80: "Third-Party Confirmation",
             }[signature_type_id]
         except KeyError:
             raise ValueError("Signature type ({}) not recognized.".format(signature_type_id))
@@ -331,9 +334,23 @@ class OpenPGPFile(list):
                 19: "ECDSA public key algorithm",
                 20: "Reserved (formerly Elgamal Encrypt or Sign)",
                 21: "Reserved for Diffie-Hellman (X9.42, as defined for IETF-S/MIME)",
+                22: "EdDSA public key algorithm",
+                100: "Private or experimental",
+                101: "Private or experimental",
+                102: "Private or experimental",
+                103: "Private or experimental",
+                104: "Private or experimental",
+                105: "Private or experimental",
+                106: "Private or experimental",
+                107: "Private or experimental",
+                108: "Private or experimental",
+                109: "Private or experimental",
+                110: "Private or experimental",
             }[pubkey_algo_id]
         except KeyError:
-            raise ValueError("Public-Key algorithm ({}) not recognized.".format(pubkey_algo_id))
+            pubkey_algo_name = "Unknown"
+            result['error'] = True
+            result['error_msg'] = "Public-Key algorithm ({}) not recognized.".format(pubkey_algo_id)
         result['pubkey_algo_id'] = pubkey_algo_id
         result['pubkey_algo_name'] = pubkey_algo_name
 
@@ -344,13 +361,19 @@ class OpenPGPFile(list):
                 1: "MD5",
                 2: "SHA1",
                 3: "RIPEMD160",
+                4: "Reserved",
+                5: "Reserved",
+                6: "Reserved",
+                7: "Reserved",
                 8: "SHA256",
                 9: "SHA384",
                 10: "SHA512",
                 11: "SHA224",
             }[hash_algo_id]
         except KeyError:
-            raise ValueError("Hash algorithm ({}) not recognized.".format(hash_algo_id))
+            hash_algo_name = "Unknown"
+            result['error'] = True
+            result['error_msg'] = "Hash algorithm ({}) not recognized.".format(hash_algo_id)
         result['hash_algo_id'] = hash_algo_id
         result['hash_algo_name'] = hash_algo_name
 
@@ -372,7 +395,7 @@ class OpenPGPFile(list):
                     subpacket_len = first_octet
 
                 #two bytes length
-                elif first_octet >= 192 and first_octet <= 223:
+                elif first_octet >= 192 and first_octet < 255:
                     second_octet = ord(self.rawfile.read(1))
                     subpacket_len = ((first_octet - 192) << 8) + second_octet + 192
 
@@ -400,7 +423,7 @@ class OpenPGPFile(list):
                     subpacket_len = first_octet
 
                 #two bytes length
-                elif first_octet >= 192 and first_octet <= 223:
+                elif first_octet >= 192 and first_octet < 255:
                     second_octet = ord(self.rawfile.read(1))
                     subpacket_len = ((first_octet - 192) << 8) + second_octet + 192
 
@@ -438,6 +461,7 @@ class OpenPGPFile(list):
                         6: "Regular Expression",
                         7: "Revocable",
                         9: "Key Expiration Time",
+                        10: "Placeholder for backward compatibility",
                         11: "Preferred Symmetric Algorithms",
                         12: "Revocation Key",
                         16: "Issuer",
@@ -454,9 +478,24 @@ class OpenPGPFile(list):
                         30: "Features",
                         31: "Signature Target",
                         32: "Embedded Signature",
+                        100: "Private or experimental",
+                        101: "Private or experimental",
+                        102: "Private or experimental",
+                        103: "Private or experimental",
+                        104: "Private or experimental",
+                        105: "Private or experimental",
+                        106: "Private or experimental",
+                        107: "Private or experimental",
+                        108: "Private or experimental",
+                        109: "Private or experimental",
+                        110: "Private or experimental",
                     }[type_id]
                 except KeyError:
-                    raise ValueError("Subpacket type ({}) not recognized.".format(type_id))
+                    result['error'] = True
+                    result['error_msg'] = "Subpacket type ({}) not recognized.".format(type_id)
+                    subpacket['error'] = True
+                    subpacket['error_msg'] = "Subpacket type ({}) not recognized.".format(type_id)
+                    continue
                 subpacket['type_id'] = type_id
                 subpacket['type_name'] = type_name
 
@@ -513,7 +552,10 @@ class OpenPGPFile(list):
                     #revocation class
                     revoke_class = ord(self.rawfile.read(1))
                     if revoke_class >> 7 != 1:
-                        raise ValueError("Revoke class must start with a 1 bit.")
+                        result['error'] = True
+                        result['error_msg'] = "Revoke class must start with a 1 bit."
+                        subpacket['error'] = True
+                        subpacket['error_msg'] = "Revoke class must start with a 1 bit."
                     sensitive = revoke_class & 0x40 >> 6 == 1
                     subpacket['sensitive'] = sensitive
 
@@ -652,21 +694,22 @@ class OpenPGPFile(list):
             sig_len_bytes = self.rawfile.read(2)
             sig_len = int(sig_len_bytes.encode('hex'), 16)
             sig_numbytes = int(math.ceil(sig_len / 8.0))
-            sig_bytes = self.rawfile.read(sig_numbytes)
+            sig_bytes = self.rawfile.read(sig_numbytes) or "\x00"
             sig_int = int(sig_bytes.encode('hex'), 16)
             if sig_int >> sig_len != 0:
-                raise ValueError("RSA signature has non-zero leading bits.")
+                result['error'] = True
+                result['error_msg'] = "RSA signature has non-zero leading bits."
             sig_hex = "{0:0{1}x}".format(sig_int, sig_numbytes * 2)
             result['signature'] = sig_hex
 
         #DSA signature
-        elif pubkey_algo_id == 17:
+        elif pubkey_algo_id in [17, 19, 22]:
 
             #DSA value r
             r_len_bytes = self.rawfile.read(2)
             r_len = int(r_len_bytes.encode('hex'), 16)
             r_numbytes = int(math.ceil(r_len / 8.0))
-            r_bytes = self.rawfile.read(r_numbytes)
+            r_bytes = self.rawfile.read(r_numbytes) or "\x00"
             r_int = int(r_bytes.encode('hex'), 16)
             if r_int >> r_len != 0:
                 raise ValueError("DSA signature r has non-zero leading bits.")
@@ -677,12 +720,26 @@ class OpenPGPFile(list):
             s_len_bytes = self.rawfile.read(2)
             s_len = int(s_len_bytes.encode('hex'), 16)
             s_numbytes = int(math.ceil(s_len / 8.0))
-            s_bytes = self.rawfile.read(s_numbytes)
+            s_bytes = self.rawfile.read(s_numbytes) or "\x00"
             s_int = int(s_bytes.encode('hex'), 16)
             if s_int >> s_len != 0:
                 raise ValueError("DSA signature s has non-zero leading bits.")
             s_hex = "{0:0{1}x}".format(s_int, s_numbytes * 2)
             result['signature_s'] = s_hex
+
+        #Reserved (formerly Elgamal Encrypt or Sign)
+        elif pubkey_algo_id == 20:
+            pass
+
+        #Experimental
+        elif pubkey_algo_id >= 100 and pubkey_algo_id <= 110:
+            pass
+
+        #reject all other types of signatures
+        else:
+            result['error'] = True
+            result['error_msg'] = "Unsupported signature type ({}).".format(pubkey_algo_id)
+            return result
 
         #binary data document data
         if signature_type_name == "Signature of a binary document":
@@ -709,12 +766,26 @@ class OpenPGPFile(list):
             if "\r" not in msg_body:
                 msg_body = msg_body.replace("\n", "\r\n")
 
+        #direct key signature
+        elif signature_type_name  == "Signature directly on a key":
+            #find the closest primary public key
+            i = len(self) - 1
+            while i >= 0:
+                if self[i]['tag_name'] == "Public-Key":
+                    self.rawfile.seek(self[i]['start'])
+                    prefix = "\x99"
+                    len_octets = "{0:0{1}x}".format(self[i]['len'], 4).decode("hex")
+                    msg_body = prefix + len_octets + self.rawfile.read(self[i]['len'])
+                    break
+                i = i - 1
+
         #user id/attribute document data
         elif signature_type_name in [
             "Generic certification",
             "Persona certification",
             "Casual certification",
             "Positive certification",
+            "Certification revocation",
         ]:
             #find the closest primary public key
             i = len(self) - 1
@@ -768,10 +839,7 @@ class OpenPGPFile(list):
                 i = i - 1
 
         #subkey binding document data
-        elif signature_type_name in [
-            "Subkey Binding Signature",
-            "Primary Key Binding Signature",
-        ]:
+        elif signature_type_name in ["Subkey Binding", "Primary Key Binding"]:
 
             #find the closest primary public key
             i = len(self) - 1
@@ -796,7 +864,7 @@ class OpenPGPFile(list):
                 i = i - 1
 
         #primary key revoking document data
-        elif signature_type_name == "Key revocation signature":
+        elif signature_type_name == "Key revocation":
 
             #find the closest primary public key
             i = len(self) - 1
@@ -810,7 +878,7 @@ class OpenPGPFile(list):
                 i = i - 1
 
         #subkey revoking document data
-        elif signature_type_name == "Subkey revocation signature":
+        elif signature_type_name == "Subkey revocation":
 
             #find the closest primary public key
             i = len(self) - 1
@@ -825,8 +893,8 @@ class OpenPGPFile(list):
 
         #hash trailer
         if version == 3:
-            self.rawfile.seek(packet_start + 1)
-            trailer = self.rawfile.read(5).encode("hex")
+            trailer = "{0:0{1}x}".format(result['signature_type_id'], 2).decode("hex")
+            trailer += "{0:0{1}x}".format(result['creation_time'], 8).decode("hex")
         elif version == 4:
             hash_len = hashed_subpacket_end - packet_start
             self.rawfile.seek(packet_start)
@@ -839,7 +907,7 @@ class OpenPGPFile(list):
         result['data'] = data.encode("hex")
 
         #hash result
-        if hash_algo_name == "MD5":
+        if hash_algo_name in ["MD5", "Reserved"]:
             h = hashlib.md5()
         elif hash_algo_name == "SHA1":
             h = hashlib.sha1()
@@ -858,7 +926,9 @@ class OpenPGPFile(list):
 
         #validate hash_check
         if not result['hash'].startswith(hash_check):
-            raise ValueError("Digest doesn't start with '{}'.".format(hash_check))
+            result['error'] = True
+            result['error_msg'] = "Digest ({}) doesn't start with '{}'.".format(result['hash'], hash_check)
+            return result
 
         return result
 
@@ -1148,7 +1218,10 @@ class OpenPGPFile(list):
         self.rawfile.seek(packet_start)
         version = ord(self.rawfile.read(1))
         if version not in [3, 4]:
-            raise ValueError("Public Key version is invalid ({}).".format(version))
+            result['error'] = True
+            result['error_msg'] = "Public Key version is invalid ({}).".format(version)
+            return result
+            #raise ValueError("Public Key version is invalid ({}).".format(version))
         result['version'] = version
 
         #creation date
@@ -1175,6 +1248,18 @@ class OpenPGPFile(list):
                 19: "ECDSA public key algorithm",
                 20: "Reserved (formerly Elgamal Encrypt or Sign)",
                 21: "Reserved for Diffie-Hellman (X9.42, as defined for IETF-S/MIME)",
+                22: "EdDSA public key algorithm",
+                100: "Private or experimental",
+                101: "Private or experimental",
+                102: "Private or experimental",
+                103: "Private or experimental",
+                104: "Private or experimental",
+                105: "Private or experimental",
+                106: "Private or experimental",
+                107: "Private or experimental",
+                108: "Private or experimental",
+                109: "Private or experimental",
+                110: "Private or experimental",
             }[algo_id]
         except KeyError:
             raise ValueError("Public-Key algorithm ({}) not recognized.".format(algo_id))
@@ -1190,7 +1275,7 @@ class OpenPGPFile(list):
             n_len_bytes = self.rawfile.read(2)
             n_len = int(n_len_bytes.encode('hex'), 16)
             n_numbytes = int(math.ceil(n_len / 8.0))
-            n_bytes = self.rawfile.read(n_numbytes)
+            n_bytes = self.rawfile.read(n_numbytes) or "\x00"
             n_int = int(n_bytes.encode('hex'), 16)
             if n_int >> n_len != 0:
                 raise ValueError("RSA modulus has non-zero leading bits.")
@@ -1202,7 +1287,7 @@ class OpenPGPFile(list):
             e_len_bytes = self.rawfile.read(2)
             e_len = int(e_len_bytes.encode('hex'), 16)
             e_numbytes = int(math.ceil(e_len / 8.0))
-            e_bytes = self.rawfile.read(e_numbytes)
+            e_bytes = self.rawfile.read(e_numbytes) or "\x00"
             e_int = int(e_bytes.encode('hex'), 16)
             if e_int >> e_len != 0:
                 raise ValueError("RSA exponent has non-zero leading bits.")
@@ -1219,33 +1304,235 @@ class OpenPGPFile(list):
 
         #Elgamal
         elif algo_id in [16, 20]:
-            raise NotImplementedError("Elgamal public key parsing is not implemented yet :(")
+
+            #prime p
+            p_len_bytes = self.rawfile.read(2)
+            p_len = int(p_len_bytes.encode('hex'), 16)
+            p_numbytes = int(math.ceil(p_len / 8.0))
+            p_bytes = self.rawfile.read(p_numbytes) or "\x00"
+            p_int = int(p_bytes.encode('hex'), 16)
+            if p_int >> p_len != 0:
+                raise ValueError("Elgamal prime p has non-zero leading bits.")
+            p_hex = "{0:0{1}x}".format(p_int, p_numbytes * 2)
+            result['p'] = p_hex
+
+            #generator g
+            g_len_bytes = self.rawfile.read(2)
+            g_len = int(g_len_bytes.encode('hex'), 16)
+            g_numbytes = int(math.ceil(g_len / 8.0))
+            g_bytes = self.rawfile.read(g_numbytes) or "\x00"
+            g_int = int(g_bytes.encode('hex'), 16)
+            if g_int >> g_len != 0:
+                raise ValueError("Elgamal generator g has non-zero leading bits.")
+            g_hex = "{0:0{1}x}".format(g_int, g_numbytes * 2)
+            result['g'] = g_hex
+
+            #public-key value y
+            y_len_bytes = self.rawfile.read(2)
+            y_len = int(y_len_bytes.encode('hex'), 16)
+            y_numbytes = int(math.ceil(y_len / 8.0))
+            y_bytes = self.rawfile.read(y_numbytes) or "\x00"
+            y_int = int(y_bytes.encode('hex'), 16)
+            if y_int >> y_len != 0:
+                raise ValueError("Elgamal public-key value y has non-zero leading bits.")
+            y_hex = "{0:0{1}x}".format(y_int, y_numbytes * 2)
+            result['y'] = y_hex
+
+            #TODO: Make real pem bytes
+            pem_bytes = "\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff"
 
         #DSA
         elif algo_id == 17:
-            raise NotImplementedError("DSA public key parsing is not implemented yet :(")
+
+            #prime p
+            p_len_bytes = self.rawfile.read(2)
+            p_len = int(p_len_bytes.encode('hex'), 16)
+            p_numbytes = int(math.ceil(p_len / 8.0))
+            p_bytes = self.rawfile.read(p_numbytes) or "\x00"
+            p_int = int(p_bytes.encode('hex'), 16)
+            if p_int >> p_len != 0:
+                raise ValueError("DSA prime p has non-zero leading bits.")
+            p_hex = "{0:0{1}x}".format(p_int, p_numbytes * 2)
+            result['p'] = p_hex
+
+            #group order q
+            q_len_bytes = self.rawfile.read(2)
+            q_len = int(q_len_bytes.encode('hex'), 16)
+            q_numbytes = int(math.ceil(q_len / 8.0))
+            q_bytes = self.rawfile.read(q_numbytes) or "\x00"
+            q_int = int(q_bytes.encode('hex'), 16)
+            if q_int >> q_len != 0:
+                raise ValueError("DSA group order q has non-zero leading bits.")
+            q_hex = "{0:0{1}x}".format(q_int, q_numbytes * 2)
+            result['q'] = q_hex
+
+            #generator g
+            g_len_bytes = self.rawfile.read(2)
+            g_len = int(g_len_bytes.encode('hex'), 16)
+            g_numbytes = int(math.ceil(g_len / 8.0))
+            g_bytes = self.rawfile.read(g_numbytes) or "\x00"
+            g_int = int(g_bytes.encode('hex'), 16)
+            if g_int >> g_len != 0:
+                result['error'] = True
+                result['error_msg'] = "DSA generator g has non-zero leading bits."
+            g_hex = "{0:0{1}x}".format(g_int, g_numbytes * 2)
+            result['g'] = g_hex
+
+            #public-key value y
+            y_len_bytes = self.rawfile.read(2)
+            y_len = int(y_len_bytes.encode('hex'), 16)
+            y_numbytes = int(math.ceil(y_len / 8.0))
+            y_bytes = self.rawfile.read(y_numbytes) or "\x00"
+            y_int = int(y_bytes.encode('hex'), 16)
+            if y_int >> y_len != 0:
+                result['error'] = True
+                result['error_msg'] = "DSA public-key value y has non-zero leading bits."
+            y_hex = "{0:0{1}x}".format(y_int, y_numbytes * 2)
+            result['y'] = y_hex
+
+            #TODO: Make real pem bytes
+            pem_bytes = "\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff"
 
         #ECDH
         elif algo_id == 18:
-            raise NotImplementedError("ECDH public key parsing is not implemented yet :(")
+
+            #curve oid
+            oid_len = ord(self.rawfile.read(1))
+            oid = self.rawfile.read(oid_len)
+            try:
+                curve_name = {
+                    "2a8648ce3d030107": "NIST curve P-256",
+                    "2b81040022":       "NIST curve P-384",
+                    "2b81040023":       "NIST curve P-521",
+                }[oid.encode("hex")]
+            except KeyError:
+                raise ValueError("ECDH has unknown curve OID ('{}').".format(oid.encode("hex")))
+            result['oid'] = oid
+            result['curve_name'] = curve_name
+
+            #public key coords
+            coords_len_bytes = self.rawfile.read(2)
+            coords_len = int(coords_len_bytes.encode('hex'), 16)
+            coords_numbytes = int(math.ceil(coords_len / 8.0))
+            coords_bytes = self.rawfile.read(coords_numbytes) or "\x00"
+            coords_int = int(coords_bytes.encode('hex'), 16)
+            if coords_int >> coords_len != 0:
+                raise ValueError("ECDH coords have non-zero leading bits.")
+            coords_hex = "{0:0{1}x}".format(coords_int, coords_numbytes * 2)
+
+            #uncompressed coordinates
+            coords_x = coords_hex[1:(len(coords_hex) - 1)/2]
+            coords_y = coords_hex[(len(coords_hex) - 1)/2:]
+            result['x'] = coords_x
+            result['y'] = coords_y
+
+            #KDF parameters
+            kdf_len = ord(self.rawfile.read(1))
+            kdf_version = ord(self.rawfile.read(1))
+            if kdf_version != 1:
+                raise ValueError("ECDH version ({}) is not 1.".format(kdf_version))
+            kdf_hash_id = ord(self.rawfile.read(1))
+            kdf_algo_id = ord(self.rawfile.read(1))
+            result['kdf_hash_id'] = kdf_hash_id
+            result['kdf_algo_id'] = kdf_algo_id
+
+            #TODO: Make real pem bytes
+            pem_bytes = "\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff"
 
         #ECDSA
         elif algo_id == 19:
-            raise NotImplementedError("ECDSA public key parsing is not implemented yet :(")
+
+            #curve oid
+            oid_len = ord(self.rawfile.read(1))
+            oid = self.rawfile.read(oid_len)
+            try:
+                curve_name = {
+                    "2a8648ce3d030107":   "NIST curve P-256",
+                    "2b81040022":         "NIST curve P-384",
+                    "2b81040023":         "NIST curve P-521",
+                    "2b2403030208010107": "brainpoolP256r1",
+                    "2b240303020801010b": "brainpoolP384r1",
+                    "2b240303020801010d": "brainpoolP512r1",
+                }[oid.encode("hex")]
+            except KeyError:
+                raise ValueError("ECDSA has unknown curve OID ('{}').".format(oid.encode("hex")))
+            result['oid'] = oid
+            result['curve_name'] = curve_name
+
+            #public key coords
+            coords_len_bytes = self.rawfile.read(2)
+            coords_len = int(coords_len_bytes.encode('hex'), 16)
+            coords_numbytes = int(math.ceil(coords_len / 8.0))
+            coords_bytes = self.rawfile.read(coords_numbytes) or "\x00"
+            coords_int = int(coords_bytes.encode('hex'), 16)
+            if coords_int >> coords_len != 0:
+                raise ValueError("ECDSA coords have non-zero leading bits.")
+            coords_hex = "{0:0{1}x}".format(coords_int, coords_numbytes * 2)
+
+            #uncompressed coordinates
+            coords_x = coords_hex[1:(len(coords_hex) - 1)/2]
+            coords_y = coords_hex[(len(coords_hex) - 1)/2:]
+            result['x'] = coords_x
+            result['y'] = coords_y
+
+            #TODO: Make real pem bytes
+            pem_bytes = "\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff"
 
         #DH
         elif algo_id == 21:
             raise NotImplementedError("DH public key parsing is not implemented yet :(")
+
+        #EdDSA
+        elif algo_id == 22:
+
+            #curve oid
+            oid_len = ord(self.rawfile.read(1))
+            oid = self.rawfile.read(oid_len)
+            try:
+                curve_name = {
+                    "2b06010401da470f01": "Ed25519",
+                }[oid.encode("hex")]
+            except KeyError:
+                raise ValueError("EdDSA has unknown curve OID ('{}').".format(oid.encode("hex")))
+            result['oid'] = oid
+            result['curve_name'] = curve_name
+
+            #public key coords
+            coords_len_bytes = self.rawfile.read(2)
+            coords_len = int(coords_len_bytes.encode('hex'), 16)
+            coords_numbytes = int(math.ceil(coords_len / 8.0))
+            coords_bytes = self.rawfile.read(coords_numbytes) or "\x00"
+            coords_int = int(coords_bytes.encode('hex'), 16)
+            if coords_int >> coords_len != 0:
+                raise ValueError("EdDSA coords have non-zero leading bits.")
+            coords_hex = "{0:0{1}x}".format(coords_int, coords_numbytes * 2)
+
+            #compressed format
+            if coords_hex.startswith("40"):
+                result['x'] = coords_hex[1:]
+
+            #uncompressed format
+            elif coords_hex.startswith("04"):
+                result['x'] = coords_hex[1:(len(coords_hex) - 1)/2]
+                result['y'] = coords_hex[(len(coords_hex) - 1)/2:]
+
+            #TODO: Make real pem bytes
+            pem_bytes = "\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff"
+
+        #private/experimental
+        elif algo_id >= 100 and algo_id <= 110:
+            pem_bytes = None
 
         #reject all other algorithms
         else:
             raise ValueError("Public Key algorithm is invalid ({}).".format(algo_id))
 
         #pem file
-        p = base64.b64encode(pem_bytes)
-        pem_b64 = "\n".join([p[i*64:(i+1)*64] for i in xrange(0, int(math.ceil(len(p)/64))+1)])
-        pem_str = "-----BEGIN PUBLIC KEY-----\n{}\n-----END PUBLIC KEY-----".format(pem_b64)
-        result['pem'] = pem_str
+        if pem_bytes:
+            p = base64.b64encode(pem_bytes)
+            pem_b64 = "\n".join([p[i*64:(i+1)*64] for i in xrange(0, int(math.ceil(len(p)/64))+1)])
+            pem_str = "-----BEGIN PUBLIC KEY-----\n{}\n-----END PUBLIC KEY-----".format(pem_b64)
+            result['pem'] = pem_str
 
         #fingerprint (version 3)
         if version == 3:
@@ -1312,6 +1599,22 @@ class OpenPGPFile(list):
 
         return bytes
 
+    def read_pubsubkey(self, packet_start, packet_len):
+        """
+        Specification:
+        https://tools.ietf.org/html/rfc4880#section-5.5.1.2
+
+        Return Format:
+        Same as read_pubkey, except tag_id is 14 and tag_name is "Public-Subkey"
+        """
+        pubkey_result = self.read_pubkey(packet_start, packet_len)
+        pubkey_result['tag_id'] = 14
+        pubkey_result['tag_name'] = "Public-Subkey"
+        return pubkey_result
+
+    def generate_pubsubkey(self, p):
+        return self.generate_pubkey(p)
+
     def read_userid(self, packet_start, packet_len):
         """
         Specification:
@@ -1338,21 +1641,113 @@ class OpenPGPFile(list):
     def generate_userid(self, p):
         return p['user_id']
 
-    def read_pubsubkey(self, packet_start, packet_len):
+    def read_attribute(self, packet_start, packet_len):
         """
         Specification:
-        https://tools.ietf.org/html/rfc4880#section-5.5.1.2
+        https://tools.ietf.org/html/rfc4880#section-5.12
 
         Return Format:
-        Same as read_pubkey, except tag_id is 14 and tag_name is "Public-Subkey"
+        {
+            "tag_id": 17,
+            "tag_name": "User Attribute",
+            "start": 0,
+            "len": 123,
+            "subpackets": [
+                {
+                    "type_id": 1,
+                    "type_name": "Image",
+                    "version": 1,
+                    "encoding": "JPEG",
+                    "image": "<bytecode>",
+                },
+                ...
+            ],
+        }
         """
-        pubkey_result = self.read_pubkey(packet_start, packet_len)
-        pubkey_result['tag_id'] = 14
-        pubkey_result['tag_name'] = "Public-Subkey"
-        return pubkey_result
+        result = {
+            "tag_id": 17,
+            "tag_name": "User Attribute",
+            "start": packet_start,
+            "len": packet_len,
+            "subpackets": [],
+        }
 
-    def generate_pubsubkey(self, p):
-        return self.generate_pubkey(p)
+        #read the user attribute subpackets
+        self.rawfile.seek(packet_start)
+        while self.rawfile.tell() < (packet_start + packet_len):
+
+            #one byte length
+            first_octet = ord(self.rawfile.read(1))
+            if first_octet < 192:
+                packet_len = first_octet
+
+            #two bytes length
+            elif first_octet >= 192 and first_octet < 255:
+                second_octet = ord(self.rawfile.read(1))
+                packet_len = ((first_octet - 192) << 8) + second_octet + 192
+
+            #four bytes length
+            elif first_octet == 255:
+                four_bytes = self.rawfile.read(4)
+                packet_len = int(four_bytes.encode('hex'), 16)
+
+            #subpacket type
+            type_id = ord(self.rawfile.read(1))
+            try:
+                type_name = {
+                    1: "Image",
+                }[type_id]
+            except KeyError:
+                raise ValueError("User Attribute subpacket type ({}) not recognized.".format(type_id))
+            subpacket = {
+                "type_id": type_id,
+                "type_name": type_name,
+            }
+
+            #Image subpacket
+            if type_id == 1:
+
+                #get the header length
+                header_len_bytes = "".join(reversed(self.rawfile.read(2))) #little endian
+                header_len = int(header_len_bytes.encode('hex'), 16)
+                if header_len != 16:
+                    raise ValueError("Image header size is invalid ({}).".format(header_len))
+
+                #get the header version
+                header_version = ord(self.rawfile.read(1))
+                if header_version != 1:
+                    raise ValueError("Image header version is invalid ({}).".format(header_version))
+                subpacket['version'] = header_version
+
+                #get image encoding
+                image_encoding_id = ord(self.rawfile.read(1))
+                try:
+                    image_encoding = {
+                        1: "JPEG",
+                    }[image_encoding_id]
+                except KeyError:
+                    raise ValueError("Image encoding ({}) not recognized.".format(image_encoding_id))
+                subpacket['encoding'] = image_encoding
+
+                #the rest of the header is blank
+                header_remaining = self.rawfile.read(12)
+                if int(header_remaining.encode('hex'), 16) != 0:
+                    result['error'] = True
+                    result['error_msg'] = "Image header remainder contains non-zero values."
+
+                #the rest of the subpacket is the image
+                subpacket['image'] = self.rawfile.read(packet_len - header_len)
+
+            else:
+                raise ValueError("Unknown User Attribute subpacket type ({}).".format(type_id))
+
+            result['subpackets'].append(subpacket)
+
+        return result
+
+    def generate_attribute(self, p):
+        #TODO
+        raise NotImplementedError("Generating User Attributes is not supported yet :(")
 
     def read_packets(self):
         """
@@ -1517,9 +1912,9 @@ class OpenPGPFile(list):
             elif packet_tag == 14:
                 packet_dict = self.read_pubsubkey(i, packet_len)
 
-            #TODO: User Attribute Packet
+            #User Attribute Packet
             elif packet_tag == 17:
-                raise NotImplementedError("User Attribute Packet is not implemented yet :(")
+                packet_dict = self.read_attribute(i, packet_len)
 
             #TODO: Sym. Encrypted and Integrity Protected Data Packet
             elif packet_tag == 18:
