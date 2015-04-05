@@ -2160,7 +2160,18 @@ class OpenPGPFile(list):
         return bytes
 
 if __name__ == "__main__":
+    import glob
     import json
-    pgpfile = OpenPGPFile(open(sys.argv[1]))
-    print json.dumps(pgpfile, indent=4, sort_keys=True)
+    paths = glob.glob(sys.argv[1])
+    for path in paths:
+        packets = OpenPGPFile(open(path))
+        key = []
+        for p in packets:
+            if p['tag_name'] == "Public-Key":
+                if key:
+                    print json.dumps(key, sort_keys=True, encoding="latin1")
+                key = [p]
+            else:
+                key.append(p)
+        print json.dumps(key, sort_keys=True, encoding="latin1")
 
