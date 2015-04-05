@@ -1,5 +1,4 @@
 import os
-import sys
 import math
 import base64
 import hashlib
@@ -2281,18 +2280,81 @@ class OpenPGPFile(list):
         return bytes
 
 if __name__ == "__main__":
+    import sys
     import glob
     import json
-    paths = glob.glob(sys.argv[1])
-    for path in paths:
-        packets = OpenPGPFile(open(path))
-        key = []
-        for p in packets:
-            if p['tag_name'] == "Public-Key":
-                if key:
-                    print json.dumps(key, sort_keys=True, encoding="latin1")
-                key = [p]
+    from copy import copy
+    from argparse import ArgumentParser
+    from argparse import RawTextHelpFormatter
+
+    parser = ArgumentParser(
+        formatter_class=RawTextHelpFormatter,
+        description="""
+Output a pgp file's packets into rows of json-formatted objects.
+
+NOTE: Each row of output is a json object, but the whole output'
+itself is not a json list.
+
+Add the --merge-public-keys (-m) to roll up public keys. This is
+helpful if you are working with a dumped keyserver database that
+is just a huge list of concatenated packets (public keys,
+signatures, subkeys, etc.).
+
+Examples:
+python openpgp.py /home/me/Alice.pub
+python openpgp.py --merge-public-keys "/tmp/dump*.pgp" | gzip > pubkeys.json
+""")
+    parser.add_argument("file", nargs="+", help="the pgp file(s)")
+    parser.add_argument("-m", "--merge-public-keys", action="store_true", help="roll up public key packets")
+    args = parser.parse_args()
+
+    #iterate through file list
+    for f in args.file:
+        paths = glob.glob(os.path.expanduser(f))
+        for path in paths:
+
+            #parse the packets
+            sys.stderr.write("Parsing {}...".format(path))
+            sys.stderr.flush()
+
+            packets = OpenPGPFile(open(path))
+
+            sys.stderr.write("Done\n")
+            sys.stderr.flush()
+
+            #merge public keys
+            if args.merge_public_keys:
+
+                sys.stderr.write("Dumping public keys...".format(path))
+                sys.stderr.flush()
+
+                key = {}
+                for p in packets:
+                    if p['tag_name'] == "Public-Key":
+                        if key:
+                            print json.dumps(key, sort_keys=True, encoding="latin1")
+                        key = copy(p)
+                        key['packets'] = [p]
+                    else:
+                        #bubble errors
+                        if p.get("error"):
+                            key['error'] = True
+                            key.setdefault("error_msg", []).append(p['error_msg'])
+                        key.setdefault("packets", []).append(p)
+                print json.dumps(key, sort_keys=True, encoding="latin1")
+
+                sys.stderr.write("Done\n")
+                sys.stderr.flush()
+
+            #straight dump of packets
             else:
-                key.append(p)
-        print json.dumps(key, sort_keys=True, encoding="latin1")
+
+                sys.stderr.write("Dumping packets...".format(path))
+                sys.stderr.flush()
+
+                for p in packets:
+                    print json.dumps(p, sort_keys=True, encoding="latin1")
+
+                sys.stderr.write("Done\n")
+                sys.stderr.flush()
 
