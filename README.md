@@ -19,6 +19,7 @@ public keys.
   * [User ID Packets](#user-id-packets)
   * [User Attribute Packets](#user-attribute-packets)
 * [Roadmap](#roadmap)
+* [Keyserver dump](#keyserver-dump)
 * [Contributing](#contributing)
 
 ### How to use
@@ -387,6 +388,31 @@ command line, these are converted to json.
   * [Modification Detection Code Packet (Tag 19)](https://tools.ietf.org/html/rfc4880#section-5.14)
 * Generating ASCII armored packets
 * Tests
+
+#### Keyserver dump
+
+This is how you can load a keyserver dump into elasticsearch.
+
+```sh
+#download the latest keyserver dump
+mkdir /tmp/dump
+cd /tmp/dump
+wget -c -r -p -e robots=off --timestamping --level=1 --cut-dirs=3 \
+--no-host-directories http://keyserver.mattrude.com/dump/current/
+
+#convert keyserver dump to json
+ls -1 /tmp/dump/*.pgp | \
+xargs -I % sh -c "python openpgp.py --merge-public-keys '%' | gzip -9 > '%.json.gz'"
+
+#import into elasticsearch
+zcat /tmp/dump/*.pgp.json.gz | \
+while read line;
+do
+  echo "$line" | \
+  curl -X POST -d @- http://localhost:9200/keyserver/key/ 2> /dev/null | \
+  { cat -; echo ""; };
+done > /tmp/results.log
+```
 
 ### Contributing
 

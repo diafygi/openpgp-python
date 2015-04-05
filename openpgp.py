@@ -2373,7 +2373,6 @@ python openpgp.py --merge-public-keys "/tmp/dump*.pgp" | gzip > pubkeys.json
                         if key:
                             print json.dumps(key, sort_keys=True, encoding="latin1")
                         key = copy(p)
-                        key['packets'] = [p]
                     else:
                         #bubble errors
                         if p.get("error"):
