@@ -276,7 +276,7 @@ class OpenPGPFile(list):
         version = ord(self.rawfile.read(1))
         if version not in [3, 4]:
             result['error'] = True
-            result['error_msg'] = "Signature version is invalid ({}).".format(version)
+            result.setdefault("error_msg", []).append("Signature version is invalid ({}).".format(version))
             return result
         result['version'] = version
 
@@ -285,7 +285,7 @@ class OpenPGPFile(list):
             sig_header_len = ord(self.rawfile.read(1))
             if sig_header_len != 5:
                 result['error'] = True
-                result['error_msg'] = "Signature body ({} bytes) not 5 bytes long.".format(sig_header_len)
+                result.setdefault("error_msg", []).append("Signature body ({} bytes) not 5 bytes long.".format(sig_header_len))
                 return result
 
         #signature type
@@ -311,7 +311,7 @@ class OpenPGPFile(list):
         except KeyError:
             signature_type_name = "Unknown"
             result['error'] = True
-            result['error_msg'] = "Signature type ({}) not recognized.".format(signature_type_id)
+            result.setdefault("error_msg", []).append("Signature type ({}) not recognized.".format(signature_type_id))
         result['signature_type_id'] = signature_type_id
         result['signature_type_name'] = signature_type_name
 
@@ -355,7 +355,7 @@ class OpenPGPFile(list):
         except KeyError:
             pubkey_algo_name = "Unknown"
             result['error'] = True
-            result['error_msg'] = "Public-Key algorithm ({}) not recognized.".format(pubkey_algo_id)
+            result.setdefault("error_msg", []).append("Public-Key algorithm ({}) not recognized.".format(pubkey_algo_id))
         result['pubkey_algo_id'] = pubkey_algo_id
         result['pubkey_algo_name'] = pubkey_algo_name
 
@@ -378,7 +378,7 @@ class OpenPGPFile(list):
         except KeyError:
             hash_algo_name = "Unknown"
             result['error'] = True
-            result['error_msg'] = "Hash algorithm ({}) not recognized.".format(hash_algo_id)
+            result.setdefault("error_msg", []).append("Hash algorithm ({}) not recognized.".format(hash_algo_id))
         result['hash_algo_id'] = hash_algo_id
         result['hash_algo_name'] = hash_algo_name
 
@@ -389,6 +389,12 @@ class OpenPGPFile(list):
             hashed_subpacket_len_bytes = self.rawfile.read(2)
             hashed_subpacket_len = int(hashed_subpacket_len_bytes.encode('hex'), 16)
             hashed_subpacket_end = self.rawfile.tell() + hashed_subpacket_len
+
+            #make sure the section length is not over the end point
+            if hashed_subpacket_end > body_start + body_len:
+                result['error'] = True
+                result.setdefault("error_msg", []).append("Hashed subpacket section overflows the overall length.")
+                hashed_subpacket_end = body_start + body_len
 
             #hashed subpackets
             subpackets_raw = []
@@ -412,7 +418,7 @@ class OpenPGPFile(list):
                 #make sure the subpacket length is not over the end point
                 if self.rawfile.tell() + subpacket_len > hashed_subpacket_end:
                     result['error'] = True
-                    result['error_msg'] = "Hashed subpacket length overflows the overall length."
+                    result.setdefault("error_msg", []).append("Hashed subpacket length overflows the overall length.")
                     subpacket_len = hashed_subpacket_end - self.rawfile.tell()
 
                 #save the position and length of the subpacket
@@ -424,6 +430,12 @@ class OpenPGPFile(list):
             unhashed_subpacket_len_bytes = self.rawfile.read(2)
             unhashed_subpacket_len = int(unhashed_subpacket_len_bytes.encode('hex'), 16)
             unhashed_subpacket_end = self.rawfile.tell() + unhashed_subpacket_len
+
+            #make sure the section length is not over the end point
+            if unhashed_subpacket_end > body_start + body_len:
+                result['error'] = True
+                result.setdefault("error_msg", []).append("Unhashed subpacket section overflows the overall length.")
+                unhashed_subpacket_end = body_start + body_len
 
             #hashed subpackets
             while self.rawfile.tell() < unhashed_subpacket_end:
@@ -446,7 +458,7 @@ class OpenPGPFile(list):
                 #make sure the subpacket length is not over the end point
                 if self.rawfile.tell() + subpacket_len > unhashed_subpacket_end:
                     result['error'] = True
-                    result['error_msg'] = "Unhashed subpacket length overflows the overall length."
+                    result.setdefault("error_msg", []).append("Unhashed subpacket length overflows the overall length.")
                     subpacket_len = unhashed_subpacket_end - self.rawfile.tell()
 
                 #save the position and length of the subpacket
@@ -509,9 +521,9 @@ class OpenPGPFile(list):
                     }[type_id]
                 except KeyError:
                     result['error'] = True
-                    result['error_msg'] = "Subpacket type ({}) not recognized.".format(type_id)
+                    result.setdefault("error_msg", []).append("Subpacket type ({}) not recognized.".format(type_id))
                     subpacket['error'] = True
-                    subpacket['error_msg'] = "Subpacket type ({}) not recognized.".format(type_id)
+                    subpacket.setdefault("error_msg", []).append("Subpacket type ({}) not recognized.".format(type_id))
                     continue
                 subpacket['type_id'] = type_id
                 subpacket['type_name'] = type_name
@@ -570,9 +582,9 @@ class OpenPGPFile(list):
                     revoke_class = ord(self.rawfile.read(1))
                     if revoke_class >> 7 != 1:
                         result['error'] = True
-                        result['error_msg'] = "Revoke class must start with a 1 bit."
+                        result.setdefault("error_msg", []).append("Revoke class must start with a 1 bit.")
                         subpacket['error'] = True
-                        subpacket['error_msg'] = "Revoke class must start with a 1 bit."
+                        subpacket.setdefault("error_msg", []).append("Revoke class must start with a 1 bit.")
                     sensitive = revoke_class & 0x40 >> 6 == 1
                     subpacket['sensitive'] = sensitive
 
@@ -600,6 +612,19 @@ class OpenPGPFile(list):
                     #name and value
                     name_len = int(self.rawfile.read(2).encode('hex'), 16)
                     value_len = int(self.rawfile.read(2).encode('hex'), 16)
+                    if self.rawfile.tell() + name_len > subpacket_start + subpacket_len:
+                        result['error'] = True
+                        result.setdefault("error_msg", []).append("Subpacket name overflows the overall length.")
+                        subpacket['error'] = True
+                        subpacket.setdefault("error_msg", []).append("Subpacket name overflows the overall length.")
+                        name_len = max(0, subpacket_len - (self.rawfile.tell() - subpacket_start))
+                        value_len = 0
+                    elif self.rawfile.tell() + name_len + value_len > subpacket_start + subpacket_len:
+                        result['error'] = True
+                        result.setdefault("error_msg", []).append("Subpacket value overflows the overall length.")
+                        subpacket['error'] = True
+                        subpacket.setdefault("error_msg", []).append("Subpacket value overflows the overall length.")
+                        value_len = max(0, subpacket_len - (self.rawfile.tell() - subpacket_start))
                     subpacket['name'] = self.rawfile.read(name_len)
                     subpacket['value'] = self.rawfile.read(value_len)
 
@@ -668,9 +693,9 @@ class OpenPGPFile(list):
                         }[code_id]
                     except KeyError:
                         result['error'] = True
-                        result['error_msg'] = "Revocation code ({}) not recognized.".format(code_id)
+                        result.setdefault("error_msg", []).append("Revocation code ({}) not recognized.".format(code_id))
                         subpacket['error'] = True
-                        subpacket['error_msg'] = "Revocation code ({}) not recognized.".format(code_id)
+                        subpacket.setdefault("error_msg", []).append("Revocation code ({}) not recognized.".format(code_id))
                         code_name = "Unknown"
                     subpacket['code_id'] = code_id
                     subpacket['code_name'] = code_name
@@ -715,13 +740,18 @@ class OpenPGPFile(list):
             sig_len_bytes = self.rawfile.read(2)
             sig_len = int(sig_len_bytes.encode('hex'), 16)
             sig_numbytes = int(math.ceil(sig_len / 8.0))
-            sig_bytes = self.rawfile.read(sig_numbytes) or "\x00"
-            sig_int = int(sig_bytes.encode('hex'), 16)
-            if sig_int >> sig_len != 0:
+            if self.rawfile.tell() + sig_numbytes > body_start + body_len:
                 result['error'] = True
-                result['error_msg'] = "RSA signature has non-zero leading bits."
-            sig_hex = "{0:0{1}x}".format(sig_int, sig_numbytes * 2)
-            result['signature'] = sig_hex
+                result.setdefault("error_msg", []).append("RSA signature overflows the overall length.")
+                sig_numbytes = max(0, body_len - (self.rawfile.tell() - body_start))
+            sig_bytes = self.rawfile.read(sig_numbytes)
+            if len(sig_bytes):
+                sig_int = int(sig_bytes.encode('hex'), 16)
+                if sig_int >> sig_len != 0:
+                    result['error'] = True
+                    result.setdefault("error_msg", []).append("RSA signature has non-zero leading bits.")
+                sig_hex = "{0:0{1}x}".format(sig_int, sig_numbytes * 2)
+                result['signature'] = sig_hex
 
         #DSA signature
         elif pubkey_algo_id in [17, 19, 22]:
@@ -730,25 +760,35 @@ class OpenPGPFile(list):
             r_len_bytes = self.rawfile.read(2)
             r_len = int(r_len_bytes.encode('hex'), 16)
             r_numbytes = int(math.ceil(r_len / 8.0))
-            r_bytes = self.rawfile.read(r_numbytes) or "\x00"
-            r_int = int(r_bytes.encode('hex'), 16)
-            if r_int >> r_len != 0:
+            if self.rawfile.tell() + r_numbytes > body_start + body_len:
                 result['error'] = True
-                result['error_msg'] = "DSA signature r has non-zero leading bits."
-            r_hex = "{0:0{1}x}".format(r_int, r_numbytes * 2)
-            result['signature_r'] = r_hex
+                result.setdefault("error_msg", []).append("DSA signature r overflows the overall length.")
+                r_numbytes = max(0, body_len - (self.rawfile.tell() - body_start))
+            r_bytes = self.rawfile.read(r_numbytes)
+            if len(r_bytes):
+                r_int = int(r_bytes.encode('hex'), 16)
+                if r_int >> r_len != 0:
+                    result['error'] = True
+                    result.setdefault("error_msg", []).append("DSA signature r has non-zero leading bits.")
+                r_hex = "{0:0{1}x}".format(r_int, r_numbytes * 2)
+                result['signature_r'] = r_hex
 
             #DSA value s
             s_len_bytes = self.rawfile.read(2)
             s_len = int(s_len_bytes.encode('hex'), 16)
             s_numbytes = int(math.ceil(s_len / 8.0))
-            s_bytes = self.rawfile.read(s_numbytes) or "\x00"
-            s_int = int(s_bytes.encode('hex'), 16)
-            if s_int >> s_len != 0:
+            if self.rawfile.tell() + s_numbytes > body_start + body_len:
                 result['error'] = True
-                result['error_msg'] = "DSA signature s has non-zero leading bits."
-            s_hex = "{0:0{1}x}".format(s_int, s_numbytes * 2)
-            result['signature_s'] = s_hex
+                result.setdefault("error_msg", []).append("DSA signature s overflows the overall length.")
+                s_numbytes = max(0, body_len - (self.rawfile.tell() - body_start))
+            s_bytes = self.rawfile.read(s_numbytes)
+            if len(s_bytes):
+                s_int = int(s_bytes.encode('hex'), 16)
+                if s_int >> s_len != 0:
+                    result['error'] = True
+                    result.setdefault("error_msg", []).append("DSA signature s has non-zero leading bits.")
+                s_hex = "{0:0{1}x}".format(s_int, s_numbytes * 2)
+                result['signature_s'] = s_hex
 
         #Reserved (formerly Elgamal Encrypt or Sign)
         elif pubkey_algo_id == 20:
@@ -761,7 +801,7 @@ class OpenPGPFile(list):
         #reject all other types of signatures
         else:
             result['error'] = True
-            result['error_msg'] = "Unsupported signature type ({}).".format(pubkey_algo_id)
+            result.setdefault("error_msg", []).append("Unsupported signature type ({}).".format(pubkey_algo_id))
             return result
 
         #binary data document data
@@ -946,11 +986,11 @@ class OpenPGPFile(list):
             h = hashlib.sha224()
         elif hash_algo_name == "Reserved":
             result['error'] = True
-            result['error_msg'] = "Digest algorithm ({}) can't be checked.".format(result['hash_algo_id'])
+            result.setdefault("error_msg", []).append("Digest algorithm ({}) can't be checked.".format(result['hash_algo_id']))
             return result
         else:
             result['error'] = True
-            result['error_msg'] = "Unknown digest algorithm ({}).".format(result['hash_algo_id'])
+            result.setdefault("error_msg", []).append("Unknown digest algorithm ({}).".format(result['hash_algo_id']))
             return result
         h.update(data)
         result['hash'] = h.hexdigest()
@@ -958,7 +998,7 @@ class OpenPGPFile(list):
         #validate hash_check
         if not result['hash'].startswith(hash_check):
             result['error'] = True
-            result['error_msg'] = "Digest ({}) doesn't start with '{}'.".format(result['hash'], hash_check)
+            result.setdefault("error_msg", []).append("Digest ({}) doesn't start with '{}'.".format(result['hash'], hash_check))
             return result
 
         return result
@@ -1250,7 +1290,7 @@ class OpenPGPFile(list):
         version = ord(self.rawfile.read(1))
         if version not in [3, 4]:
             result['error'] = True
-            result['error_msg'] = "Public Key version is invalid ({}).".format(version)
+            result.setdefault("error_msg", []).append("Public Key version is invalid ({}).".format(version))
             return result
         result['version'] = version
 
@@ -1293,7 +1333,7 @@ class OpenPGPFile(list):
             }[algo_id]
         except KeyError:
             result['error'] = True
-            result['error_msg'] = "Public-Key algorithm ({}) not recognized.".format(algo_id)
+            result.setdefault("error_msg", []).append("Public-Key algorithm ({}) not recognized.".format(algo_id))
             result['algo_id'] = algo_id
             return result
         result['algo_id'] = algo_id
@@ -1301,32 +1341,43 @@ class OpenPGPFile(list):
 
         #RSA
         if algo_id in [1, 2, 3]:
+            pem = ""
 
             #modulus
             n_len_bytes = self.rawfile.read(2)
             n_len = int(n_len_bytes.encode('hex'), 16)
             n_numbytes = int(math.ceil(n_len / 8.0))
-            n_bytes = self.rawfile.read(n_numbytes) or "\x00"
-            n_int = int(n_bytes.encode('hex'), 16)
-            if n_int >> n_len != 0:
+            if self.rawfile.tell() + n_numbytes > body_start + body_len:
                 result['error'] = True
-                result['error_msg'] = "RSA modulus has non-zero leading bits."
-            n_hex = "{0:0{1}x}".format(n_int, n_numbytes * 2)
-            result['n'] = n_hex
-            pem = "0282{0:0{1}x}00".format(n_numbytes + 1, 4) + n_hex
+                result.setdefault("error_msg", []).append("RSA modulus overflows the overall length.")
+                n_numbytes = max(0, body_len - (self.rawfile.tell() - body_start))
+            n_bytes = self.rawfile.read(n_numbytes)
+            if len(n_bytes):
+                n_int = int(n_bytes.encode('hex'), 16)
+                if n_int >> n_len != 0:
+                    result['error'] = True
+                    result.setdefault("error_msg", []).append("RSA modulus has non-zero leading bits.")
+                n_hex = "{0:0{1}x}".format(n_int, n_numbytes * 2)
+                result['n'] = n_hex
+                pem += "0282{0:0{1}x}00".format(n_numbytes + 1, 4) + n_hex
 
             #exponent
             e_len_bytes = self.rawfile.read(2)
             e_len = int(e_len_bytes.encode('hex'), 16)
             e_numbytes = int(math.ceil(e_len / 8.0))
-            e_bytes = self.rawfile.read(e_numbytes) or "\x00"
-            e_int = int(e_bytes.encode('hex'), 16)
-            if e_int >> e_len != 0:
+            if self.rawfile.tell() + e_numbytes > body_start + body_len:
                 result['error'] = True
-                result['error_msg'] = "RSA exponent has non-zero leading bits."
-            e_hex = "{0:0{1}x}".format(e_int, e_numbytes * 2)
-            result['e'] = e_hex
-            pem += "0282{0:0{1}x}".format(e_numbytes, 4) + e_hex
+                result.setdefault("error_msg", []).append("RSA exponent overflows the overall length.")
+                e_numbytes = max(0, body_len - (self.rawfile.tell() - body_start))
+            e_bytes = self.rawfile.read(e_numbytes)
+            if len(e_bytes):
+                e_int = int(e_bytes.encode('hex'), 16)
+                if e_int >> e_len != 0:
+                    result['error'] = True
+                    result.setdefault("error_msg", []).append("RSA exponent has non-zero leading bits.")
+                e_hex = "{0:0{1}x}".format(e_int, e_numbytes * 2)
+                result['e'] = e_hex
+                pem += "0282{0:0{1}x}".format(e_numbytes, 4) + e_hex
 
             #pem format
             pem_seq = "3082{0:0{1}x}".format(len(pem) / 2, 4) + pem
@@ -1342,37 +1393,52 @@ class OpenPGPFile(list):
             p_len_bytes = self.rawfile.read(2)
             p_len = int(p_len_bytes.encode('hex'), 16)
             p_numbytes = int(math.ceil(p_len / 8.0))
-            p_bytes = self.rawfile.read(p_numbytes) or "\x00"
-            p_int = int(p_bytes.encode('hex'), 16)
-            if p_int >> p_len != 0:
+            if self.rawfile.tell() + p_numbytes > body_start + body_len:
                 result['error'] = True
-                result['error_msg'] = "Elgamal prime p has non-zero leading bits."
-            p_hex = "{0:0{1}x}".format(p_int, p_numbytes * 2)
-            result['p'] = p_hex
+                result.setdefault("error_msg", []).append("Elgamal prime p overflows the overall length.")
+                p_numbytes = max(0, body_len - (self.rawfile.tell() - body_start))
+            p_bytes = self.rawfile.read(p_numbytes)
+            if len(p_bytes):
+                p_int = int(p_bytes.encode('hex'), 16)
+                if p_int >> p_len != 0:
+                    result['error'] = True
+                    result.setdefault("error_msg", []).append("Elgamal prime p has non-zero leading bits.")
+                p_hex = "{0:0{1}x}".format(p_int, p_numbytes * 2)
+                result['p'] = p_hex
 
             #generator g
             g_len_bytes = self.rawfile.read(2)
             g_len = int(g_len_bytes.encode('hex'), 16)
             g_numbytes = int(math.ceil(g_len / 8.0))
-            g_bytes = self.rawfile.read(g_numbytes) or "\x00"
-            g_int = int(g_bytes.encode('hex'), 16)
-            if g_int >> g_len != 0:
+            if self.rawfile.tell() + g_numbytes > body_start + body_len:
                 result['error'] = True
-                result['error_msg'] = "Elgamal generator g has non-zero leading bits."
-            g_hex = "{0:0{1}x}".format(g_int, g_numbytes * 2)
-            result['g'] = g_hex
+                result.setdefault("error_msg", []).append("Elgamal generator g overflows the overall length.")
+                g_numbytes = max(0, body_len - (self.rawfile.tell() - body_start))
+            g_bytes = self.rawfile.read(g_numbytes)
+            if len(g_bytes):
+                g_int = int(g_bytes.encode('hex'), 16)
+                if g_int >> g_len != 0:
+                    result['error'] = True
+                    result.setdefault("error_msg", []).append("Elgamal generator g has non-zero leading bits.")
+                g_hex = "{0:0{1}x}".format(g_int, g_numbytes * 2)
+                result['g'] = g_hex
 
             #public-key value y
             y_len_bytes = self.rawfile.read(2)
             y_len = int(y_len_bytes.encode('hex'), 16)
             y_numbytes = int(math.ceil(y_len / 8.0))
-            y_bytes = self.rawfile.read(y_numbytes) or "\x00"
-            y_int = int(y_bytes.encode('hex'), 16)
-            if y_int >> y_len != 0:
+            if self.rawfile.tell() + y_numbytes > body_start + body_len:
                 result['error'] = True
-                result['error_msg'] = "Elgamal public-key value y has non-zero leading bits."
-            y_hex = "{0:0{1}x}".format(y_int, y_numbytes * 2)
-            result['y'] = y_hex
+                result.setdefault("error_msg", []).append("Elgamal public-key value y overflows the overall length.")
+                y_numbytes = max(0, body_len - (self.rawfile.tell() - body_start))
+            y_bytes = self.rawfile.read(y_numbytes)
+            if len(y_bytes):
+                y_int = int(y_bytes.encode('hex'), 16)
+                if y_int >> y_len != 0:
+                    result['error'] = True
+                    result.setdefault("error_msg", []).append("Elgamal public-key value y has non-zero leading bits.")
+                y_hex = "{0:0{1}x}".format(y_int, y_numbytes * 2)
+                result['y'] = y_hex
 
             #TODO: Make real pem bytes
             pem_bytes = "\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff"
@@ -1384,49 +1450,69 @@ class OpenPGPFile(list):
             p_len_bytes = self.rawfile.read(2)
             p_len = int(p_len_bytes.encode('hex'), 16)
             p_numbytes = int(math.ceil(p_len / 8.0))
-            p_bytes = self.rawfile.read(p_numbytes) or "\x00"
-            p_int = int(p_bytes.encode('hex'), 16)
-            if p_int >> p_len != 0:
+            if self.rawfile.tell() + p_numbytes > body_start + body_len:
                 result['error'] = True
-                result['error_msg'] = "DSA prime p has non-zero leading bits."
-            p_hex = "{0:0{1}x}".format(p_int, p_numbytes * 2)
-            result['p'] = p_hex
+                result.setdefault("error_msg", []).append("DSA prime p overflows the overall length.")
+                p_numbytes = max(0, body_len - (self.rawfile.tell() - body_start))
+            p_bytes = self.rawfile.read(p_numbytes)
+            if len(p_bytes):
+                p_int = int(p_bytes.encode('hex'), 16)
+                if p_int >> p_len != 0:
+                    result['error'] = True
+                    result.setdefault("error_msg", []).append("DSA prime p has non-zero leading bits.")
+                p_hex = "{0:0{1}x}".format(p_int, p_numbytes * 2)
+                result['p'] = p_hex
 
             #group order q
             q_len_bytes = self.rawfile.read(2)
             q_len = int(q_len_bytes.encode('hex'), 16)
             q_numbytes = int(math.ceil(q_len / 8.0))
-            q_bytes = self.rawfile.read(q_numbytes) or "\x00"
-            q_int = int(q_bytes.encode('hex'), 16)
-            if q_int >> q_len != 0:
+            if self.rawfile.tell() + q_numbytes > body_start + body_len:
                 result['error'] = True
-                result['error_msg'] = "DSA group order q has non-zero leading bits."
-            q_hex = "{0:0{1}x}".format(q_int, q_numbytes * 2)
-            result['q'] = q_hex
+                result.setdefault("error_msg", []).append("DSA group order q overflows the overall length.")
+                q_numbytes = max(0, body_len - (self.rawfile.tell() - body_start))
+            q_bytes = self.rawfile.read(q_numbytes)
+            if len(q_bytes):
+                q_int = int(q_bytes.encode('hex'), 16)
+                if q_int >> q_len != 0:
+                    result['error'] = True
+                    result.setdefault("error_msg", []).append("DSA group order q has non-zero leading bits.")
+                q_hex = "{0:0{1}x}".format(q_int, q_numbytes * 2)
+                result['q'] = q_hex
 
             #generator g
             g_len_bytes = self.rawfile.read(2)
             g_len = int(g_len_bytes.encode('hex'), 16)
             g_numbytes = int(math.ceil(g_len / 8.0))
-            g_bytes = self.rawfile.read(g_numbytes) or "\x00"
-            g_int = int(g_bytes.encode('hex'), 16)
-            if g_int >> g_len != 0:
+            if self.rawfile.tell() + g_numbytes > body_start + body_len:
                 result['error'] = True
-                result['error_msg'] = "DSA generator g has non-zero leading bits."
-            g_hex = "{0:0{1}x}".format(g_int, g_numbytes * 2)
-            result['g'] = g_hex
+                result.setdefault("error_msg", []).append("DSA generator g overflows the overall length.")
+                g_numbytes = max(0, body_len - (self.rawfile.tell() - body_start))
+            g_bytes = self.rawfile.read(g_numbytes)
+            if len(g_bytes):
+                g_int = int(g_bytes.encode('hex'), 16)
+                if g_int >> g_len != 0:
+                    result['error'] = True
+                    result.setdefault("error_msg", []).append("DSA generator g has non-zero leading bits.")
+                g_hex = "{0:0{1}x}".format(g_int, g_numbytes * 2)
+                result['g'] = g_hex
 
             #public-key value y
             y_len_bytes = self.rawfile.read(2)
             y_len = int(y_len_bytes.encode('hex'), 16)
             y_numbytes = int(math.ceil(y_len / 8.0))
-            y_bytes = self.rawfile.read(y_numbytes) or "\x00"
-            y_int = int(y_bytes.encode('hex'), 16)
-            if y_int >> y_len != 0:
+            if self.rawfile.tell() + y_numbytes > body_start + body_len:
                 result['error'] = True
-                result['error_msg'] = "DSA public-key value y has non-zero leading bits."
-            y_hex = "{0:0{1}x}".format(y_int, y_numbytes * 2)
-            result['y'] = y_hex
+                result.setdefault("error_msg", []).append("DSA public-key value y overflows the overall length.")
+                y_numbytes = max(0, body_len - (self.rawfile.tell() - body_start))
+            y_bytes = self.rawfile.read(y_numbytes)
+            if len(y_bytes):
+                y_int = int(y_bytes.encode('hex'), 16)
+                if y_int >> y_len != 0:
+                    result['error'] = True
+                    result.setdefault("error_msg", []).append("DSA public-key value y has non-zero leading bits.")
+                y_hex = "{0:0{1}x}".format(y_int, y_numbytes * 2)
+                result['y'] = y_hex
 
             #TODO: Make real pem bytes
             pem_bytes = "\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff"
@@ -1436,6 +1522,10 @@ class OpenPGPFile(list):
 
             #curve oid
             oid_len = ord(self.rawfile.read(1))
+            if self.rawfile.tell() + oid_len > body_start + body_len:
+                result['error'] = True
+                result.setdefault("error_msg", []).append("ECDH OID length overflows the overall length.")
+                oid_len = max(0, body_len - (self.rawfile.tell() - body_start))
             oid = self.rawfile.read(oid_len)
             try:
                 curve_name = {
@@ -1450,7 +1540,7 @@ class OpenPGPFile(list):
             except KeyError:
                 curve_name = "Unknown"
                 result['error'] = True
-                result['error_msg'] = "ECDH has unknown curve OID ('{}').".format(oid.encode("hex"))
+                result.setdefault("error_msg", []).append("ECDH has unknown curve OID ('{}').".format(oid.encode("hex")))
             result['oid'] = oid
             result['curve_name'] = curve_name
 
@@ -1458,18 +1548,23 @@ class OpenPGPFile(list):
             coords_len_bytes = self.rawfile.read(2)
             coords_len = int(coords_len_bytes.encode('hex'), 16)
             coords_numbytes = int(math.ceil(coords_len / 8.0))
-            coords_bytes = self.rawfile.read(coords_numbytes) or "\x00"
-            coords_int = int(coords_bytes.encode('hex'), 16)
-            if coords_int >> coords_len != 0:
+            if self.rawfile.tell() + coords_numbytes > body_start + body_len:
                 result['error'] = True
-                result['error_msg'] = "ECDH coords have non-zero leading bits."
-            coords_hex = "{0:0{1}x}".format(coords_int, coords_numbytes * 2)
+                result.setdefault("error_msg", []).append("ECDH coords overflows the overall length.")
+                coords_numbytes = max(0, body_len - (self.rawfile.tell() - body_start))
+            coords_bytes = self.rawfile.read(coords_numbytes)
+            if len(coords_bytes):
+                coords_int = int(coords_bytes.encode('hex'), 16)
+                if coords_int >> coords_len != 0:
+                    result['error'] = True
+                    result.setdefault("error_msg", []).append("ECDH coords have non-zero leading bits.")
+                coords_hex = "{0:0{1}x}".format(coords_int, coords_numbytes * 2)
 
-            #uncompressed coordinates
-            coords_x = coords_hex[1:(len(coords_hex) - 1)/2]
-            coords_y = coords_hex[(len(coords_hex) - 1)/2:]
-            result['x'] = coords_x
-            result['y'] = coords_y
+                #uncompressed coordinates
+                coords_x = coords_hex[1:(len(coords_hex) - 1)/2]
+                coords_y = coords_hex[(len(coords_hex) - 1)/2:]
+                result['x'] = coords_x
+                result['y'] = coords_y
 
             #KDF parameters
             kdf_len = ord(self.rawfile.read(1))
@@ -1481,7 +1576,7 @@ class OpenPGPFile(list):
                 result['kdf_algo_id'] = kdf_algo_id
             else:
                 result['error'] = True
-                result['error_msg'] = "ECDH version ({}) is not 1.".format(kdf_version)
+                result.setdefault("error_msg", []).append("ECDH version ({}) is not 1.".format(kdf_version))
 
             #TODO: Make real pem bytes
             pem_bytes = "\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff"
@@ -1491,6 +1586,10 @@ class OpenPGPFile(list):
 
             #curve oid
             oid_len = ord(self.rawfile.read(1))
+            if self.rawfile.tell() + oid_len > body_start + body_len:
+                result['error'] = True
+                result.setdefault("error_msg", []).append("ECDSA OID length overflows the overall length.")
+                oid_len = max(0, body_len - (self.rawfile.tell() - body_start))
             oid = self.rawfile.read(oid_len)
             try:
                 curve_name = {
@@ -1505,7 +1604,7 @@ class OpenPGPFile(list):
             except KeyError:
                 curve_name = "Unknown"
                 result['error'] = True
-                result['error_msg'] = "ECDSA has unknown curve OID ('{}').".format(oid.encode("hex"))
+                result.setdefault("error_msg", []).append("ECDSA has unknown curve OID ('{}').".format(oid.encode("hex")))
             result['oid'] = oid
             result['curve_name'] = curve_name
 
@@ -1513,18 +1612,23 @@ class OpenPGPFile(list):
             coords_len_bytes = self.rawfile.read(2)
             coords_len = int(coords_len_bytes.encode('hex'), 16)
             coords_numbytes = int(math.ceil(coords_len / 8.0))
-            coords_bytes = self.rawfile.read(coords_numbytes) or "\x00"
-            coords_int = int(coords_bytes.encode('hex'), 16)
-            if coords_int >> coords_len != 0:
+            if self.rawfile.tell() + coords_numbytes > body_start + body_len:
                 result['error'] = True
-                result['error_msg'] = "ECDSA coords have non-zero leading bits."
-            coords_hex = "{0:0{1}x}".format(coords_int, coords_numbytes * 2)
+                result.setdefault("error_msg", []).append("ECDSA coords overflows the overall length.")
+                coords_numbytes = max(0, body_len - (self.rawfile.tell() - body_start))
+            coords_bytes = self.rawfile.read(coords_numbytes)
+            if len(coords_bytes):
+                coords_int = int(coords_bytes.encode('hex'), 16)
+                if coords_int >> coords_len != 0:
+                    result['error'] = True
+                    result.setdefault("error_msg", []).append("ECDSA coords have non-zero leading bits.")
+                coords_hex = "{0:0{1}x}".format(coords_int, coords_numbytes * 2)
 
-            #uncompressed coordinates
-            coords_x = coords_hex[1:(len(coords_hex) - 1)/2]
-            coords_y = coords_hex[(len(coords_hex) - 1)/2:]
-            result['x'] = coords_x
-            result['y'] = coords_y
+                #uncompressed coordinates
+                coords_x = coords_hex[1:(len(coords_hex) - 1)/2]
+                coords_y = coords_hex[(len(coords_hex) - 1)/2:]
+                result['x'] = coords_x
+                result['y'] = coords_y
 
             #TODO: Make real pem bytes
             pem_bytes = "\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff"
@@ -1538,6 +1642,10 @@ class OpenPGPFile(list):
 
             #curve oid
             oid_len = ord(self.rawfile.read(1))
+            if self.rawfile.tell() + oid_len > body_start + body_len:
+                result['error'] = True
+                result.setdefault("error_msg", []).append("ECDSA OID length overflows the overall length.")
+                oid_len = max(0, body_len - (self.rawfile.tell() - body_start))
             oid = self.rawfile.read(oid_len)
             try:
                 curve_name = {
@@ -1546,7 +1654,7 @@ class OpenPGPFile(list):
             except KeyError:
                 curve_name = "Unknown"
                 result['error'] = True
-                result['error_msg'] = "EdDSA has unknown curve OID ('{}').".format(oid.encode("hex"))
+                result.setdefault("error_msg", []).append("EdDSA has unknown curve OID ('{}').".format(oid.encode("hex")))
             result['oid'] = oid
             result['curve_name'] = curve_name
 
@@ -1554,21 +1662,26 @@ class OpenPGPFile(list):
             coords_len_bytes = self.rawfile.read(2)
             coords_len = int(coords_len_bytes.encode('hex'), 16)
             coords_numbytes = int(math.ceil(coords_len / 8.0))
-            coords_bytes = self.rawfile.read(coords_numbytes) or "\x00"
-            coords_int = int(coords_bytes.encode('hex'), 16)
-            if coords_int >> coords_len != 0:
+            if self.rawfile.tell() + coords_numbytes > body_start + body_len:
                 result['error'] = True
-                result['error_msg'] = "EdDSA coords have non-zero leading bits."
-            coords_hex = "{0:0{1}x}".format(coords_int, coords_numbytes * 2)
+                result.setdefault("error_msg", []).append("EdDSA coords overflows the overall length.")
+                coords_numbytes = max(0, body_len - (self.rawfile.tell() - body_start))
+            coords_bytes = self.rawfile.read(coords_numbytes)
+            if len(coords_bytes):
+                coords_int = int(coords_bytes.encode('hex'), 16)
+                if coords_int >> coords_len != 0:
+                    result['error'] = True
+                    result.setdefault("error_msg", []).append("EdDSA coords have non-zero leading bits.")
+                coords_hex = "{0:0{1}x}".format(coords_int, coords_numbytes * 2)
 
-            #compressed format
-            if coords_hex.startswith("40"):
-                result['x'] = coords_hex[1:]
+                #compressed format
+                if coords_hex.startswith("40"):
+                    result['x'] = coords_hex[1:]
 
-            #uncompressed format
-            elif coords_hex.startswith("04"):
-                result['x'] = coords_hex[1:(len(coords_hex) - 1)/2]
-                result['y'] = coords_hex[(len(coords_hex) - 1)/2:]
+                #uncompressed format
+                elif coords_hex.startswith("04"):
+                    result['x'] = coords_hex[1:(len(coords_hex) - 1)/2]
+                    result['y'] = coords_hex[(len(coords_hex) - 1)/2:]
 
             #TODO: Make real pem bytes
             pem_bytes = "\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff"
@@ -1581,7 +1694,7 @@ class OpenPGPFile(list):
         else:
             pem_bytes = None
             result['error'] = True
-            result['error_msg'] = "Public Key algorithm is invalid ({}).".format(algo_id)
+            result.setdefault("error_msg", []).append("Public Key algorithm is invalid ({}).".format(algo_id))
 
         #pem file
         if pem_bytes:
@@ -1595,7 +1708,8 @@ class OpenPGPFile(list):
             #make sure this is an rsa public key
             if algo_id not in [1, 2, 3]:
                 result['error'] = True
-                result['error_msg'] = "Public Key algorithm ({}) is not RSA, which is required in version 3.".format(algo_id)
+                result.setdefault("error_msg", []).append(
+                    "Public Key algorithm ({}) is not RSA, which is required in version 3.".format(algo_id))
                 return result
             body = "{}{}".format(n_bytes, e_bytes)
             result['fingerprint'] = hashlib.md5(body).hexdigest()
@@ -1719,7 +1833,7 @@ class OpenPGPFile(list):
                     "type_name": "Image",
                     "version": 1,
                     "encoding": "JPEG",
-                    "image": "<bytecode>",
+                    "image": "<base64_encoded_image>",
                 },
                 ...
             ],
@@ -1752,6 +1866,12 @@ class OpenPGPFile(list):
                 four_bytes = self.rawfile.read(4)
                 subpacket_len = int(four_bytes.encode('hex'), 16)
 
+            #make sure there's no overflow
+            if self.rawfile.tell() + subpacket_len > body_start + body_len:
+                result['error'] = True
+                result.setdefault("error_msg", []).append("User Attribute subpacket overflows the overall length.")
+                subpacket_len = max(0, body_len - (self.rawfile.tell() - body_start))
+
             #subpacket type
             type_id = ord(self.rawfile.read(1))
             subpacket = {"type_id": type_id}
@@ -1772,9 +1892,9 @@ class OpenPGPFile(list):
                 }[type_id]
             except KeyError:
                 result['error'] = True
-                result['error_msg'] = "User Attribute subpacket type ({}) not recognized.".format(type_id)
+                result.setdefault("error_msg", []).append("User Attribute subpacket type ({}) not recognized.".format(type_id))
                 subpacket['error'] = True
-                subpacket['error_msg'] = "User Attribute subpacket type ({}) not recognized.".format(type_id)
+                subpacket.setdefault("error_msg", []).append("User Attribute subpacket type ({}) not recognized.".format(type_id))
                 type_name = "Unknown"
             subpacket['type_name'] = type_name
 
@@ -1786,9 +1906,9 @@ class OpenPGPFile(list):
                 header_len = int(header_len_bytes.encode('hex'), 16)
                 if header_len != 16:
                     result['error'] = True
-                    result['error_msg'] = "Image header size is invalid ({}).".format(header_len)
+                    result.setdefault("error_msg", []).append("Image header size is invalid ({}).".format(header_len))
                     subpacket['error'] = True
-                    subpacket['error_msg'] = "Image header size is invalid ({}).".format(header_len)
+                    subpacket.setdefault("error_msg", []).append("Image header size is invalid ({}).".format(header_len))
                     result['subpackets'].append(subpacket)
                     return result
 
@@ -1796,9 +1916,9 @@ class OpenPGPFile(list):
                 header_version = ord(self.rawfile.read(1))
                 if header_version != 1:
                     result['error'] = True
-                    result['error_msg'] = "Image header version is invalid ({}).".format(header_version)
+                    result.setdefault("error_msg", []).append("Image header version is invalid ({}).".format(header_version))
                     subpacket['error'] = True
-                    subpacket['error_msg'] = "Image header version is invalid ({}).".format(header_version)
+                    subpacket.setdefault("error_msg", []).append("Image header version is invalid ({}).".format(header_version))
                 subpacket['version'] = header_version
 
                 #get image encoding
@@ -1810,19 +1930,20 @@ class OpenPGPFile(list):
                 except KeyError:
                     image_encoding = "Unknown"
                     result['error'] = True
-                    result['error_msg'] = "Image encoding ({}) not recognized.".format(image_encoding_id)
+                    result.setdefault("error_msg", []).append("Image encoding ({}) not recognized.".format(image_encoding_id))
                     subpacket['error'] = True
-                    subpacket['error_msg'] = "Image encoding ({}) not recognized.".format(image_encoding_id)
+                    subpacket.setdefault("error_msg", []).append("Image encoding ({}) not recognized.".format(image_encoding_id))
                 subpacket['encoding'] = image_encoding
 
                 #the rest of the header is blank
                 header_remaining = self.rawfile.read(12)
                 if int(header_remaining.encode('hex'), 16) != 0:
                     result['error'] = True
-                    result['error_msg'] = "Image header remainder contains non-zero values."
+                    result.setdefault("error_msg", []).append("Image header remainder contains non-zero values.")
 
                 #the rest of the subpacket is the image
-                subpacket['image'] = self.rawfile.read(subpacket_len - header_len)
+                image_raw = self.rawfile.read(subpacket_len - header_len)
+                subpacket['image'] = base64.b64encode(image_raw)
 
             result['subpackets'].append(subpacket)
 
