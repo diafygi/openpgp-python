@@ -22,6 +22,10 @@ class OpenPGPFile(list):
             "body_start": 0,
             "body_len": 423,
 
+            #errors (if any)
+            "error": True,
+            "error_msg": ["Error msg 1", "Error msg 2"],
+
             #packet specific keys (see each read_* method for format)
             ...
         },
@@ -145,6 +149,10 @@ class OpenPGPFile(list):
             "body_start": 0,
             "body_len": 123,
 
+            #errors (if any)
+            "error": True,
+            "error_msg": ["Error msg 1", "Error msg 2"],
+
             #signature packet values
             "version": 3 or 4,
             "signature_type_id": 16,
@@ -176,6 +184,10 @@ class OpenPGPFile(list):
                     "type_name": "Signature Creation Time",
                     "critical": True or False,
                     "hashed": True or False,
+
+                    #errors (if any)
+                    "error": True,
+                    "error_msg": ["Error msg 1", "Error msg 2"],
 
                     #Signature Creation Time specific (type_id 2)
                     "creation_time": 1234567890,
@@ -1246,6 +1258,10 @@ class OpenPGPFile(list):
             "body_start": 0,
             "body_len": 123,
 
+            #errors (if any)
+            "error": True,
+            "error_msg": ["Error msg 1", "Error msg 2"],
+
             #public key packet values
             "key_id": "deadbeefdeadbeef",
             "fingerprint": "deadbeefdeadbeefdeadbeefdeadbeef",
@@ -1798,10 +1814,17 @@ class OpenPGPFile(list):
 
         Return Format:
         {
+            #standard packet values
             "tag_id": 6,
             "tag_name": "User ID",
             "body_start": 0,
             "body_len": 123,
+
+            #errors (if any)
+            "error": True,
+            "error_msg": ["Error msg 1", "Error msg 2"],
+
+            #User ID specific fields
             "user_id": "John Doe (johndoe1234) <john.doe@example.com>",
         }
         """
@@ -1824,14 +1847,28 @@ class OpenPGPFile(list):
 
         Return Format:
         {
+            #standard packet values
             "tag_id": 17,
             "tag_name": "User Attribute",
             "body_start": 0,
             "body_len": 123,
+
+            #errors (if any)
+            "error": True,
+            "error_msg": ["Error msg 1", "Error msg 2"],
+
+            #User Attribute specific fields
             "subpackets": [
                 {
+                    #standard subpacket values
                     "type_id": 1,
                     "type_name": "Image",
+
+                    #errors (if any)
+                    "error": True,
+                    "error_msg": ["Error msg 1", "Error msg 2"],
+
+                    #image specific values
                     "version": 1,
                     "encoding": "JPEG",
                     "image": "<base64_encoded_image>",
