@@ -5,9 +5,21 @@
 This is OpenPGP file parser written in python. It will dump the packet contents
 of a PGP/GPG formatted file to a series of json-formatted objects. These json
 objects are much easier to explore and import into various data analysis tools
-and databases.
+and databases. This library is able to parse the entire sks-keyserver pool of
+public keys.
 
 ### Table of contents
+
+* [How to use](#how-to-use)
+  * [Command line](#command-line)
+  * [Python library](#python-library)
+* [Output formats](#output-formats)
+  * [Public-Key and Public-Subkey Packets](#public-key-and-public-subkey-packets)
+  * [Signature Packets](#signature-packets)
+  * [User ID Packets](#user-id-packets)
+  * [User Attribute Packets](#user-attribute-packets)
+* [Roadmap](#roadmap)
+* [Contributing](#contributing)
 
 ### How to use
 
@@ -109,6 +121,9 @@ command line, these are converted to json.
     "curve": "P-256", #(P-256|P-384|P-521)
     "x": "deadbeef",
     "y": "deadbeef",
+
+    #packets (if the -m flag was passed in the command line)
+    "packets": [...], #list of rolled up public key packets
 }
 ```
 
@@ -372,4 +387,10 @@ command line, these are converted to json.
   * [Modification Detection Code Packet (Tag 19)](https://tools.ietf.org/html/rfc4880#section-5.14)
 * Generating ASCII armored packets
 * Tests
+
+### Contributing
+
+I'd love pull requests adding support for unsupported packets types. I'd also
+love pull requests adding tests. File bug reports and feature requests in the
+issue tracker. Thanks!
 
