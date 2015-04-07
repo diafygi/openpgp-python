@@ -394,24 +394,28 @@ command line, these are converted to json.
 This is how you can load a keyserver dump into elasticsearch.
 
 ```sh
+#download openpgp.py
+mkdir ~/opengpg-python
+cd ~/openpgp-python
+wget https://raw.githubusercontent.com/diafygi/openpgp-python/master/openpgp.py > openpgp.py
+
 #download the latest keyserver dump
-mkdir /tmp/dump
-cd /tmp/dump
+mkdir ~/dump
+cd ~/dump
 wget -c -r -p -e robots=off --timestamping --level=1 --cut-dirs=3 \
 --no-host-directories http://keyserver.mattrude.com/dump/current/
 
-#convert keyserver dump to json
-ls -1 /tmp/dump/*.pgp | \
-xargs -I % sh -c "python openpgp.py --merge-public-keys '%' | gzip -9 > '%.json.gz'"
+#Parse keyserver dump to json gzip files (split every 1000 lines)
+ls -1 ~/dump/*.pgp | \
+xargs -I % sh -c "python ~/openpgp-python/openpgp.py --merge-public-keys '%' | \
+split -l 1000 -d --filter 'gzip -9 > $FILE.gz' - '%.json.'"
 
-#import into elasticsearch
-zcat /tmp/dump/*.pgp.json.gz | \
-while read line;
-do
-  echo "$line" | \
-  curl -X POST -d @- http://localhost:9200/keyserver/key/ 2> /dev/null | \
-  { cat -; echo ""; };
-done > /tmp/results.log
+#Bulk index each gzip file into elasticsearch
+ls -1 ~/dump/*.json.*.gz | \
+xargs -I % sh -c "zcat '%' | \
+sed '0~1 s/^/{ \"index\" : { \"_index\" : \"keyserver1\", \"_type\" : \"key\" } }\n/' | \
+curl -X POST --data-binary @- http://localhost:9200/_bulk | \
+{ cat -; echo ''; } >> ~/results.log"
 ```
 
 ### Contributing
