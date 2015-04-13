@@ -4,7 +4,13 @@ BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 SECRET_KEY = os.environ['DJANGO_SECRET']
 DEBUG = False
 
-ALLOWED_HOSTS = ["localhost", "localhost:8000", "keyserver-sql.daylightpirates.org"]
+ALLOWED_HOSTS = [
+    "localhost",
+    "localhost:8000",
+    "keyserver-sql.daylightpirates.org",
+    "keyserver-sql.daylightpirates.org:8000",
+    "keyserver-elasticsearch.daylightpirates.org:8000",
+]
 
 INSTALLED_APPS = (
     'django.contrib.admin',
