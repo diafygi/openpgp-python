@@ -134,7 +134,7 @@ class Command(BaseCommand):
                                 image_obj = None
                                 matching_images = models.Image.objects.filter(userattribute=useratt_obj)
                                 for jpg in matching_images:
-                                    if jpg.image == img['image']:
+                                    if jpg.image == img.get("image", None):
                                         image_obj = jpg
                                         break
 
@@ -142,8 +142,8 @@ class Command(BaseCommand):
                                 if image_obj is None:
                                     image_obj = models.Image.objects.create(
                                         userattribute=useratt_obj,
-                                        encoding=img['encoding'],
-                                        image=img['image'],
+                                        encoding=img.get("encoding", None),
+                                        image=img.get("image", None),
                                     )
 
                         #Signature
@@ -196,11 +196,11 @@ class Command(BaseCommand):
 
                     #print a status update
                     if i % 100 == 99:
-                        print "Saved {} public keys ({} new, {} updated)...".format(
-                            i+1, count_new, count_updated)
+                        print "Saved {} public keys ({} new, {} updated) from {}...".format(
+                            i+1, count_new, count_updated, path)
 
-                print "Done! Saved {} keys ({} new, {} updated)!".format(
-                    i+1, count_new, count_updated)
+                print "Done! Saved {} keys ({} new, {} updated) from {}!".format(
+                    i+1, count_new, count_updated, path)
 
 
 
