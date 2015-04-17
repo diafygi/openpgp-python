@@ -58,8 +58,12 @@ WSGI_APPLICATION = 'wsgi.application'
 
 DATABASES = {
     'default': {
-        'ENGINE': 'django.db.backends.sqlite3',
-        'NAME': os.path.join(BASE_DIR, 'db.sqlite3'),
+        'ENGINE': 'django.db.backends.postgresql_psycopg2',
+        'NAME': os.environ.get("DJANGO_DB_NAME", "openpgppythondb"),
+        'USER': os.environ.get("DJANGO_DB_USER", "openpgppythonuser"),
+        'PASSWORD': os.environ['DJANGO_DB_PASSWORD'],
+        'HOST': os.environ.get("DJANGO_DB_HOST", "localhost"),
+        'PORT': os.environ.get("DJANGO_DB_HOST", ""),
     }
 }
 
