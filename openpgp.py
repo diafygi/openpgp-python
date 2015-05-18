@@ -1980,7 +1980,7 @@ class OpenPGPFile(list):
                     result.setdefault("error_msg", []).append("Image header remainder contains non-zero values.")
 
                 #the rest of the subpacket is the image
-                image_raw = self.rawfile.read(subpacket_len - header_len)
+                image_raw = self.rawfile.read(subpacket_len - header_len - 1)
                 subpacket['image'] = base64.b64encode(image_raw)
 
             result['subpackets'].append(subpacket)
@@ -1988,8 +1988,62 @@ class OpenPGPFile(list):
         return result
 
     def generate_attribute(self, p):
-        #TODO
-        raise NotImplementedError("Generating User Attributes is not supported yet :(")
+        #build subpackets
+        attr_bytes = ""
+        subpackets = []
+        for sp in p['subpackets']:
+            sp_bytes = ""
+
+            #images
+            if sp['type_id'] == 1:
+
+                #encoding
+                encoding_id = {
+                    "JPEG": 1,
+                    "Unknown": 0,
+                }[sp['encoding']]
+
+                #image subpacket
+                sp_bytes += "{h_len}{h_ver}{encoding}{pad}{img}".format(
+                    #header length (16 bytes, little endian)
+                    h_len="1000".decode("hex"),
+                    #header version
+                    h_ver="{0:0{1}x}".format(sp['version'], 2).decode("hex"),
+                    #encoding
+                    encoding="{0:0{1}x}".format(encoding_id, 2).decode("hex"),
+                    #remainder of header length
+                    pad="{0:0{1}x}".format(0, 24).decode("hex"),
+                    #raw image
+                    img=base64.b64decode(sp['image']),
+                )
+                print "img_header", sp_bytes[:20].encode("hex")
+
+            #calculate subpacket length (same a signature subpacket lengths)
+            sp_header = ""
+            sp_len = len(sp_bytes) + 1
+
+            #one byte length
+            if sp_len < 192:
+                sp_header += "{0:0{1}x}".format(sp_len, 2).decode("hex")
+
+            #two bytes length
+            elif sp_len >= 192 and sp_len <= 8383:
+                octets = (sp_len - 192) | 0xC000
+                sp_header += "{0:0{1}x}".format(octets, 4).decode("hex")
+
+            #five bytes length
+            elif sp_len > 8383:
+                sp_header += "ff{0:0{1}x}".format(sp_len, 8).decode("hex")
+
+            #add type
+            sp_header += "{0:0{1}x}".format(sp['type_id'], 2).decode("hex")
+
+            print "sp_header", sp_header.encode("hex")
+
+            #add to overall attribute bytes
+            attr_bytes += sp_header + sp_bytes
+
+        return attr_bytes
 
     def read_packets(self):
         """
@@ -2250,9 +2304,9 @@ class OpenPGPFile(list):
             elif self[i]['tag_id'] == 14:
                 packet_bytes = self.generate_pubsubkey(self[i])
 
-            #TODO: User Attribute Packet
+            #User Attribute Packet
             elif self[i]['tag_id'] == 17:
-                raise NotImplementedError("User Attribute Packet is not implemented yet :(")
+                packet_bytes = self.generate_attribute(self[i])
 
             #TODO: Sym. Encrypted and Integrity Protected Data Packet
             elif self[i]['tag_id'] == 18:

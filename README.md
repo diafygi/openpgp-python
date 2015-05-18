@@ -383,7 +383,7 @@ command line, these are converted to json.
   * [Trust Packet (Tag 12)](https://tools.ietf.org/html/rfc4880#section-5.10)
   * ~~[User ID Packet (Tag 13)](https://tools.ietf.org/html/rfc4880#section-5.11)~~
   * ~~[Public-Subkey Packet (Tag 14)](https://tools.ietf.org/html/rfc4880#section-5.5.1.2)~~
-  * [User Attribute Packet (Tag 17)](https://tools.ietf.org/html/rfc4880#section-5.12)
+  * ~~[User Attribute Packet (Tag 17)](https://tools.ietf.org/html/rfc4880#section-5.12)~~
   * [Sym. Encrypted Integrity Protected Data Packet (Tag 18)](https://tools.ietf.org/html/rfc4880#section-5.13)
   * [Modification Detection Code Packet (Tag 19)](https://tools.ietf.org/html/rfc4880#section-5.14)
 * Generating ASCII armored packets
