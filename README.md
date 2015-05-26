@@ -354,10 +354,10 @@ command line, these are converted to json.
   * [One-Pass Signature Packets (Tag 4)](https://tools.ietf.org/html/rfc4880#section-5.4)
   * [Secret-Key Packet (Tag 5)](https://tools.ietf.org/html/rfc4880#section-5.5.1.3)
   * [Secret-Subkey Packet (Tag 7)](https://tools.ietf.org/html/rfc4880#section-5.5.1.4)
-  * [Compressed Data Packet (Tag 8)](https://tools.ietf.org/html/rfc4880#section-5.6)
+  * ~~[Compressed Data Packet (Tag 8)](https://tools.ietf.org/html/rfc4880#section-5.6)~~
   * [Symmetrically Encrypted Data Packet (Tag 9)](https://tools.ietf.org/html/rfc4880#section-5.7)
   * [Marker Packet (Obsolete Literal Packet) (Tag 10)](https://tools.ietf.org/html/rfc4880#section-5.8)
-  * [Literal Data Packet (Tag 11)](https://tools.ietf.org/html/rfc4880#section-5.9)
+  * ~~[Literal Data Packet (Tag 11)](https://tools.ietf.org/html/rfc4880#section-5.9)~~
   * [Trust Packet (Tag 12)](https://tools.ietf.org/html/rfc4880#section-5.10)
   * [Sym. Encrypted Integrity Protected Data Packet (Tag 18)](https://tools.ietf.org/html/rfc4880#section-5.13)
   * [Modification Detection Code Packet (Tag 19)](https://tools.ietf.org/html/rfc4880#section-5.14)

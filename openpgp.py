@@ -2,9 +2,12 @@
 
 import os
 import re
+import bz2
 import math
+import zlib
 import base64
 import hashlib
+import tempfile
 import cStringIO
 
 class OpenPGPFile(list):
@@ -2069,6 +2072,144 @@ class OpenPGPFile(list):
 
         return attr_bytes
 
+    def read_compressed(self, body_start, body_len):
+        """
+        Specification:
+        https://tools.ietf.org/html/rfc4880#section-5.6
+        https://tools.ietf.org/html/rfc4880#section-9.3
+
+        Compression Algorithms:
+        0          - Uncompressed
+        1          - ZIP
+        2          - ZLIB
+        3          - BZip2
+        100 to 110 - Private/Experimental algorithm
+
+        Return Format:
+        {
+            #standard packet values
+            "tag_id": 8,
+            "tag_name": "Compressed Data",
+            "body_start": 0,
+            "body_len": 123,
+
+            #errors (if any)
+            "error": True,
+            "error_msg": ["Error msg 1", "Error msg 2"],
+
+            #decompressed packets
+            "compression_algo_id": 1,
+            "compression_algo_name": "ZIP",
+            "packets": [
+                {...},
+                ...
+            ],
+        }
+        """
+        result = {
+            "tag_id": 8,
+            "tag_name": "Compressed Data",
+            "body_start": body_start,
+            "body_len": body_len,
+            "packets": [],
+        }
+
+        #read the compression algo
+        self.rawfile.seek(body_start)
+        compression_algo_id = ord(self.rawfile.read(1))
+        try:
+            compression_algo_name = {
+                0: "Uncompressed",
+                1: "ZIP",
+                2: "ZLIB",
+                3: "BZip2",
+                100: "Private or experimental",
+                101: "Private or experimental",
+                102: "Private or experimental",
+                103: "Private or experimental",
+                104: "Private or experimental",
+                105: "Private or experimental",
+                106: "Private or experimental",
+                107: "Private or experimental",
+                108: "Private or experimental",
+                109: "Private or experimental",
+                110: "Private or experimental",
+            }[compression_algo_id]
+        except KeyError:
+            result['error'] = True
+            result.setdefault("error_msg", []).append("Compression algorithm ({}) not recognized.".format(compression_algo_id))
+            return result
+
+        #Uncompressed
+        if compression_algo_id == 0:
+            decomp_file = tempfile.NamedTemporaryFile()
+            decomp_file.write(self.rawfile.read(body_len-1))
+
+        #ZIP
+        elif compression_algo_id == 1:
+            decompress = zlib.decompressobj(-zlib.MAX_WBITS)
+            decomp_file = tempfile.NamedTemporaryFile()
+            decomp_file.write(decompress.decompress(self.rawfile.read(body_len-1)))
+            decomp_file.write(decompress.flush())
+
+        #ZLIB
+        elif compression_algo_id == 2:
+            decomp_file = tempfile.NamedTemporaryFile()
+            decomp_file.write(zlib.decompress(self.rawfile.read(body_len-1)))
+
+        #BZip2
+        elif compression_algo_id == 3:
+            decomp_file = tempfile.NamedTemporaryFile()
+            decomp_file.write(bz2.decompress(self.rawfile.read(body_len-1)))
+
+        #parse the decompressed file
+        decomp_file.seek(0)
+        for packet in OpenPGPFile(decomp_file):
+            result['packets'].append(packet)
+
+        return result
+
+    def read_literal(self, body_start, body_len):
+        """
+        Specification:
+        https://tools.ietf.org/html/rfc4880#section-5.9
+
+        Return Format:
+        {
+            #standard packet values
+            "tag_id": 8,
+            "tag_name": "Compressed Data",
+            "body_start": 0,
+            "body_len": 123,
+
+            #errors (if any)
+            "error": True,
+            "error_msg": ["Error msg 1", "Error msg 2"],
+
+            #decompressed packets
+            "mode": "b", #"b", "t", or "u"
+            "data": "...",
+        }
+        """
+        result = {
+            "tag_id": 11,
+            "tag_name": "Literal Data",
+            "body_start": body_start,
+            "body_len": body_len,
+        }
+
+        #read the mode type
+        self.rawfile.seek(body_start)
+        result['mode'] = self.rawfile.read(1)
+        if result['mode'] not in ['b', 't', 'u']:
+            result['error'] = True
+            result.setdefault("error_msg", []).append("Data mode ({}) not recognized.".format(result['mode']))
+
+        #read the literal data
+        result['data'] = self.rawfile.read(body_len-1)
+
+        return result
+
     def read_packets(self):
         """
         Specification:
@@ -2205,9 +2346,9 @@ class OpenPGPFile(list):
             elif packet_tag == 7:
                 raise NotImplementedError("Secret-Subkey Packet is not implemented yet :(")
 
-            #TODO: Compressed Data Packet
+            #Compressed Data Packet
             elif packet_tag == 8:
-                raise NotImplementedError("Compressed Data Packet is not implemented yet :(")
+                packet_dict = self.read_compressed(i, body_len)
 
             #TODO: Symmetrically Encrypted Data Packet
             elif packet_tag == 9:
@@ -2217,9 +2358,9 @@ class OpenPGPFile(list):
             elif packet_tag == 10:
                 raise NotImplementedError("Marker Packet is not implemented yet :(")
 
-            #TODO: Literal Data Packet
+            #Literal Data Packet
             elif packet_tag == 11:
-                raise NotImplementedError("Literal Data Packet is not implemented yet :(")
+                packet_dict = self.read_literal(i, body_len)
 
             #TODO: Trust Packet
             elif packet_tag == 12:
