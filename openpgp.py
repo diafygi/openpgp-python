@@ -34,10 +34,24 @@ class OpenPGPFile(list):
     """
     rawfile = None
 
-    def __init__(self, fileobj):
-        super(list, self).__init__()
-        self.rawfile = fileobj
-        self.read_packets()
+    def __init__(self, fileobj_or_list):
+
+        #read the file and load the list
+        if hasattr(fileobj_or_list, "read"):
+            super(OpenPGPFile, self).__init__()
+            self.rawfile = fileobj_or_list
+            self.read_packets()
+
+        #just set the given list
+        else:
+            super(OpenPGPFile, self).__init__(fileobj_or_list)
+
+    def __getslice__(self, *args):
+        print args
+        result = super(OpenPGPFile, self).__getslice__(*args)
+        result = OpenPGPFile(result)
+        result.rawfile = self.rawfile
+        return result
 
     def read_signature(self, body_start, body_len, msg_body=""):
         """
