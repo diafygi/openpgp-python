@@ -1,9 +1,11 @@
 #!/usr/bin/env python
 
 import os
+import re
 import math
 import base64
 import hashlib
+import cStringIO
 
 class OpenPGPFile(list):
     """
@@ -40,7 +42,15 @@ class OpenPGPFile(list):
         if hasattr(fileobj_or_list, "read"):
             super(OpenPGPFile, self).__init__()
             self.rawfile = fileobj_or_list
-            self.read_packets()
+
+            #try and load the packets as-is
+            try:
+                self.read_packets()
+
+            #couldn't load the packets, so try reading them as armored text
+            except ValueError:
+                self.rawfile = self.armor_to_bytes(fileobj_or_list)
+                self.read_packets()
 
         #just set the given list
         else:
@@ -2385,6 +2395,79 @@ class OpenPGPFile(list):
             bytes += header + packet_bytes
 
         return bytes
+
+    def armor_to_bytes(self, fileobj):
+        """Convert a armored file to non-base64 encoded byte file"""
+
+        #armored message regex pattern
+        armor_re = re.compile("\
+(?:\
+^-----BEGIN PGP SIGNED MESSAGE-----\n\
+(?P<clearsign_headers>.*?)\n\n\
+(?P<clearsign_text>.*?)\n\
+|)\
+^-----BEGIN PGP \
+(?P<start>\
+(?P<key>(?:PUBLIC|PRIVATE) KEY BLOCK)\
+|\
+(?P<msg>MESSAGE(?: PART (?P<part_i>[0-9]+)(?:\/(?P<part_total>[0-9]+)|)|))\
+|\
+(?P<sig>SIGNATURE)\
+)\
+-----\n\
+(?P<headers>.*?)\n\n\
+(?P<data64>.*?)\n\
+(?P<checksum>=[A-Za-z0-9\+\/]{4})\n\
+-----END PGP \
+(?P<end>\
+(?P<key2>(?:PUBLIC|PRIVATE) KEY BLOCK)\
+|\
+(?P<msg2>MESSAGE(?: PART (?P<part_i2>[0-9]+)(?:\/(?P<part_total2>[0-9]+)|)|))\
+|\
+(?P<sig2>SIGNATURE)\
+)\
+-----$", re.MULTILINE|re.DOTALL)
+
+        #adapted from http://stackoverflow.com/a/4544284
+        def _crc24(chars):
+            INIT = 0xB704CE
+            POLY = 0x864CFB
+            crc = INIT
+            for c in map(ord, chars):
+                crc ^= (c << 16)
+                for i in xrange(8):
+                    crc <<= 1
+                    if crc & 0x1000000: crc ^= POLY
+            return crc & 0xFFFFFF
+
+        #go through the file and try to find the armored text
+        outfile = cStringIO.StringIO()
+        fileobj.seek(0)
+        file_str = fileobj.read()
+        for chunk in armor_re.finditer(file_str):
+
+            #make sure the start and end match
+            chunk = chunk.groupdict()
+            if chunk['start'] != chunk['end']:
+                continue
+
+            #convert the data64 to bytes
+            bytes = base64.b64decode(chunk['data64'])
+
+            #test the checksum
+            checksum = int(base64.b64decode(chunk['checksum']).encode("hex"), 16)
+            checksum_verify = _crc24(bytes)
+            if checksum_verify != checksum:
+                raise ValueError("Armor checksum ({}) does not match body ({})".format(
+                    "{0:0{1}x}".format(checksum, 4),
+                    "{0:0{1}x}".format(checksum_verify, 4)))
+
+            #found some armored packets, so add to the output
+            outfile.write(bytes)
+
+        #return the file-like object
+        outfile.seek(0)
+        return outfile
 
 if __name__ == "__main__":
     import sys
