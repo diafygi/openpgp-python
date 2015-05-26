@@ -334,7 +334,7 @@ command line, these are converted to json.
 ### Roadmap
 
 * ~~Parsing raw packets.~~
-* Parsing [ASCII armored packets](https://tools.ietf.org/html/rfc4880#section-6.2).
+* ~~Parsing [ASCII armored packets](https://tools.ietf.org/html/rfc4880#section-6.2)~~
 * ~~Parsing publickey related packets.~~
   * ~~[Signature Packet (Tag 2)](https://tools.ietf.org/html/rfc4880#section-5.2)~~
   * ~~[Public-Key Packet (Tag 6)](https://tools.ietf.org/html/rfc4880#section-5.5.1.1)~~
