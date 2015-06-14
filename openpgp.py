@@ -849,8 +849,7 @@ class OpenPGPFile(list):
             i = len(self) - 1
             while i >= 0:
                 if self[i]['tag_name'] == "Literal Data":
-                    self.rawfile.seek(self[i]['body_start'])
-                    msg_body = self.rawfile.read(self[i]['body_len'])
+                    msg_body = self[i]['data']
                     break
                 i = i - 1
 
@@ -860,8 +859,7 @@ class OpenPGPFile(list):
             i = len(self) - 1
             while i >= 0:
                 if self[i]['tag_name'] == "Literal Data":
-                    self.rawfile.seek(self[i]['body_start'])
-                    msg_body = self.rawfile.read(self[i]['body_len'])
+                    msg_body = self[i]['data']
                     break
                 i = i - 1
             #convert linebreaks to \r\n
@@ -2379,7 +2377,9 @@ class OpenPGPFile(list):
             "error_msg": ["Error msg 1", "Error msg 2"],
 
             #decompressed packets
-            "mode": "b", #"b", "t", or "u"
+            "mode": "b", #"b", "t", or "u",
+            "filename": "myfile",
+            "timestamp": 1234567890,
             "data": "...",
         }
         """
@@ -2397,8 +2397,17 @@ class OpenPGPFile(list):
             result['error'] = True
             result.setdefault("error_msg", []).append("Data mode ({}) not recognized.".format(result['mode']))
 
+        #read the filename
+        filename_len = ord(self.rawfile.read(1))
+        filename = self.rawfile.read(filename_len)
+        result['filename'] = filename
+
+        #read the timestamp
+        timestamp = int(self.rawfile.read(4).encode('hex'), 16)
+        result['timestamp'] = timestamp
+
         #read the literal data
-        result['data'] = self.rawfile.read(body_len-1)
+        result['data'] = self.rawfile.read(body_len - 1 - 4 - 1 - filename_len)
 
         return result
 
