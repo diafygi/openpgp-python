@@ -60,7 +60,6 @@ class OpenPGPFile(list):
             super(OpenPGPFile, self).__init__(fileobj_or_list)
 
     def __getslice__(self, *args):
-        print args
         result = super(OpenPGPFile, self).__getslice__(*args)
         result = OpenPGPFile(result)
         result.rawfile = self.rawfile
@@ -1256,6 +1255,195 @@ class OpenPGPFile(list):
         return bytes
 
 
+    def read_onepasssig(self, body_start, body_len):
+        """
+        Specifications:
+        https://tools.ietf.org/html/rfc4880#section-5.4
+
+        Signature Types:
+        ID           Signature type
+        --           ---------
+         0 (0x00)  - Signature of a binary document
+         1 (0x01)  - Signature of a canonical text document
+         2 (0x02)  - Standalone signature
+        16 (0x10)  - Generic certification of a User ID and Public-Key packet
+        17 (0x11)  - Persona certification of a User ID and Public-Key packet
+        18 (0x12)  - Casual certification of a User ID and Public-Key packet
+        19 (0x13)  - Positive certification of a User ID and Public-Key packet
+        24 (0x18)  - Subkey Binding Signature
+        25 (0x19)  - Primary Key Binding Signature
+        31 (0x1F)  - Signature directly on a key
+        32 (0x20)  - Key revocation signature
+        40 (0x28)  - Subkey revocation signature
+        48 (0x30)  - Certification revocation signature
+        64 (0x40)  - Timestamp signature
+        80 (0x50)  - Third-Party Confirmation signature
+
+        Public Key Algorithms:
+        ID           Algorithm
+        --           ---------
+        1          - RSA (Encrypt or Sign)
+        2          - RSA Encrypt-Only
+        3          - RSA Sign-Only
+        16         - Elgamal (Encrypt-Only)
+        17         - DSA (Digital Signature Algorithm)
+        18         - ECDH public key algorithm
+        19         - ECDSA public key algorithm
+        20         - Reserved (formerly Elgamal Encrypt or Sign)
+        21         - Reserved for Diffie-Hellman (X9.42, as defined for IETF-S/MIME)
+        100 to 110 - Private/Experimental algorithm
+
+        Hash Algorithms:
+        ID           Algorithm
+        --           ---------
+        1          - MD5
+        2          - SHA1
+        3          - RIPEMD160
+        4          - Reserved
+        5          - Reserved
+        6          - Reserved
+        7          - Reserved
+        8          - SHA256
+        9          - SHA384
+        10         - SHA512
+        11         - SHA224
+        100 to 110 - Private/Experimental algorithm
+
+        Return Format:
+        {
+            #standard packet values
+            "tag_id": 4,
+            "tag_name": "One-Pass Signature",
+            "body_start": 0,
+            "body_len": 123,
+
+            #errors (if any)
+            "error": True,
+            "error_msg": ["Error msg 1", "Error msg 2"],
+
+            #one-pass signature packet values
+            "version": 3,
+            "signature_type_id": 16,
+            "signature_type_name": "Generic certification of a User ID and Public-Key packet",
+            "hash_algo_id": 8,
+            "hash_algo_name": "SHA256",
+            "pubkey_algo_id": 1,
+            "pubkey_algo_name": "RSA (Encrypt or Sign)",
+            "key_id": "deadbeefdeadbeef",
+            "nested": True or False,
+        }
+
+        """
+        result = {
+            "tag_id": 4,
+            "tag_name": "One-Pass Signature",
+            "body_start": body_start,
+            "body_len": body_len,
+        }
+
+        #version
+        self.rawfile.seek(body_start)
+        version = ord(self.rawfile.read(1))
+        if version != 3:
+            result['error'] = True
+            result.setdefault("error_msg", []).append("One-Pass Signature version is invalid ({}).".format(version))
+            return result
+        result['version'] = version
+
+        #signature type
+        signature_type_id = ord(self.rawfile.read(1))
+        try:
+            signature_type_name = {
+                0: "Signature of a binary document",
+                1: "Signature of a canonical text document",
+                2: "Standalone signature",
+                16: "Generic certification",
+                17: "Persona certification",
+                18: "Casual certification",
+                19: "Positive certification",
+                24: "Subkey Binding",
+                25: "Primary Key Binding",
+                31: "Signature directly on a key",
+                32: "Key revocation",
+                40: "Subkey revocation",
+                48: "Certification revocation",
+                64: "Timestamp",
+                80: "Third-Party Confirmation",
+            }[signature_type_id]
+        except KeyError:
+            signature_type_name = "Unknown"
+            result['error'] = True
+            result.setdefault("error_msg", []).append("Signature type ({}) not recognized.".format(signature_type_id))
+        result['signature_type_id'] = signature_type_id
+        result['signature_type_name'] = signature_type_name
+
+        #hash algorithm
+        hash_algo_id = ord(self.rawfile.read(1))
+        try:
+            hash_algo_name = {
+                1: "MD5",
+                2: "SHA1",
+                3: "RIPEMD160",
+                4: "Reserved",
+                5: "Reserved",
+                6: "Reserved",
+                7: "Reserved",
+                8: "SHA256",
+                9: "SHA384",
+                10: "SHA512",
+                11: "SHA224",
+            }[hash_algo_id]
+        except KeyError:
+            hash_algo_name = "Unknown"
+            result['error'] = True
+            result.setdefault("error_msg", []).append("Hash algorithm ({}) not recognized.".format(hash_algo_id))
+        result['hash_algo_id'] = hash_algo_id
+        result['hash_algo_name'] = hash_algo_name
+
+        #public key algorithm
+        pubkey_algo_id = ord(self.rawfile.read(1))
+        try:
+            pubkey_algo_name = {
+                1: "RSA (Encrypt or Sign)",
+                2: "RSA Encrypt-Only",
+                3: "RSA Sign-Only",
+                16: "Elgamal (Encrypt-Only)",
+                17: "DSA (Digital Signature Algorithm)",
+                18: "ECDH public key algorithm",
+                19: "ECDSA public key algorithm",
+                20: "Reserved (formerly Elgamal Encrypt or Sign)",
+                21: "Reserved for Diffie-Hellman (X9.42, as defined for IETF-S/MIME)",
+                22: "EdDSA public key algorithm",
+                100: "Private or experimental",
+                101: "Private or experimental",
+                102: "Private or experimental",
+                103: "Private or experimental",
+                104: "Private or experimental",
+                105: "Private or experimental",
+                106: "Private or experimental",
+                107: "Private or experimental",
+                108: "Private or experimental",
+                109: "Private or experimental",
+                110: "Private or experimental",
+            }[pubkey_algo_id]
+        except KeyError:
+            pubkey_algo_name = "Unknown"
+            result['error'] = True
+            result.setdefault("error_msg", []).append("Public-Key algorithm ({}) not recognized.".format(pubkey_algo_id))
+        result['pubkey_algo_id'] = pubkey_algo_id
+        result['pubkey_algo_name'] = pubkey_algo_name
+
+        #signer key_id
+        key_id = self.rawfile.read(8).encode("hex")
+        result['key_id'] = key_id
+
+        #is nested (0 means nested)
+        nested_raw = ord(self.rawfile.read(1))
+        result['nested'] = nested_raw == 0
+
+        return result
+
+
     def read_pubkey(self, body_start, body_len):
         """
         Specifications:
@@ -2043,7 +2231,6 @@ class OpenPGPFile(list):
                     #raw image
                     img=base64.b64decode(sp['image']),
                 )
-                print "img_header", sp_bytes[:20].encode("hex")
 
             #calculate subpacket length (same a signature subpacket lengths)
             sp_header = ""
@@ -2064,8 +2251,6 @@ class OpenPGPFile(list):
 
             #add type
             sp_header += "{0:0{1}x}".format(sp['type_id'], 2).decode("hex")
-
-            print "sp_header", sp_header.encode("hex")
 
             #add to overall attribute bytes
             attr_bytes += sp_header + sp_bytes
@@ -2117,6 +2302,7 @@ class OpenPGPFile(list):
         #read the compression algo
         self.rawfile.seek(body_start)
         compression_algo_id = ord(self.rawfile.read(1))
+        result['compression_algo_id'] = compression_algo_id
         try:
             compression_algo_name = {
                 0: "Uncompressed",
@@ -2135,6 +2321,7 @@ class OpenPGPFile(list):
                 109: "Private or experimental",
                 110: "Private or experimental",
             }[compression_algo_id]
+            result['compression_algo_name'] = compression_algo_name
         except KeyError:
             result['error'] = True
             result.setdefault("error_msg", []).append("Compression algorithm ({}) not recognized.".format(compression_algo_id))
@@ -2148,8 +2335,9 @@ class OpenPGPFile(list):
         #ZIP
         elif compression_algo_id == 1:
             decompress = zlib.decompressobj(-zlib.MAX_WBITS)
+            decompress_raw = decompress.decompress(self.rawfile.read(body_len-1))
             decomp_file = tempfile.NamedTemporaryFile()
-            decomp_file.write(decompress.decompress(self.rawfile.read(body_len-1)))
+            decomp_file.write(decompress_raw)
             decomp_file.write(decompress.flush())
 
         #ZLIB
@@ -2161,6 +2349,10 @@ class OpenPGPFile(list):
         elif compression_algo_id == 3:
             decomp_file = tempfile.NamedTemporaryFile()
             decomp_file.write(bz2.decompress(self.rawfile.read(body_len-1)))
+
+        #find uncompressed length
+        decomp_len = decomp_file.tell()
+        result['decompressed_len'] = decomp_len
 
         #parse the decompressed file
         decomp_file.seek(0)
@@ -2275,14 +2467,46 @@ class OpenPGPFile(list):
                     body_len = first_octet
 
                 #two bytes length
-                elif first_octet >= 192 and first_octet <= 223:
+                elif first_octet >= 192 and first_octet < 224:
                     second_octet = ord(self.rawfile.read(1))
                     body_len = ((first_octet - 192) << 8) + second_octet + 192
 
-                #four bytes length
+                #five byte length
                 elif first_octet == 255:
                     four_bytes = self.rawfile.read(4)
                     body_len = int(four_bytes.encode('hex'), 16)
+
+                #partial length
+                #TODO: handle length bytes in the middle of the packet
+                else:
+                    body_len = 1 << (first_octet & 0x1f)
+
+                    #loop until end of packet is reached
+                    original_i = self.rawfile.tell()
+                    next_i = original_i + body_len
+                    while True:
+                        self.rawfile.seek(next_i)
+                        next_len = self.rawfile.read(1)
+                        first_octet = ord(next_len)
+                        if first_octet < 192:
+                            body_len += first_octet + 1
+                            break
+                        elif first_octet >= 192 and first_octet < 224:
+                            second_octet = ord(self.rawfile.read(1))
+                            body_len += ((first_octet - 192) << 8) + second_octet + 192 + 2
+                            break
+                        elif first_octet == 255:
+                            four_bytes = self.rawfile.read(4)
+                            body_len += int(four_bytes.encode('hex'), 16) + 5
+                            break
+                        else:
+                            chunk_len = 1 << (first_octet & 0x1f)
+                            body_len += chunk_len + 1
+                            next_i += chunk_len + 1
+                            if next_i > filelen:
+                                body_len = body_len - (next_i - filelen)
+                                break
+                    self.rawfile.seek(original_i)
 
             #old packet format
             elif packet_format == 0:
@@ -2330,9 +2554,9 @@ class OpenPGPFile(list):
             elif packet_tag == 3:
                 raise NotImplementedError("Symmetric-Key Encrypted Session Key Packet is not implemented yet :(")
 
-            #TODO: One-Pass Signature Packet
+            #One-Pass Signature Packet
             elif packet_tag == 4:
-                raise NotImplementedError("One-Pass Signature Packet is not implemented yet :(")
+                packet_dict = self.read_onepasssig(i, body_len)
 
             #TODO: Secret-Key Packet
             elif packet_tag == 5:

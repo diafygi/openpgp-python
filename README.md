@@ -351,7 +351,7 @@ command line, these are converted to json.
 * Parsing non-publickey related packets.
   * [Public-Key Encrypted Session Key Packets (Tag 1)](https://tools.ietf.org/html/rfc4880#section-5.1)
   * [Symmetric-Key Encrypted Session Key Packets (Tag 3)](https://tools.ietf.org/html/rfc4880#section-5.3)
-  * [One-Pass Signature Packets (Tag 4)](https://tools.ietf.org/html/rfc4880#section-5.4)
+  * ~~[One-Pass Signature Packets (Tag 4)](https://tools.ietf.org/html/rfc4880#section-5.4)~~
   * [Secret-Key Packet (Tag 5)](https://tools.ietf.org/html/rfc4880#section-5.5.1.3)
   * [Secret-Subkey Packet (Tag 7)](https://tools.ietf.org/html/rfc4880#section-5.5.1.4)
   * ~~[Compressed Data Packet (Tag 8)](https://tools.ietf.org/html/rfc4880#section-5.6)~~
