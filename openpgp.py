@@ -197,6 +197,8 @@ class OpenPGPFile(list):
             #DSA and ECDSA specific (algo_id 17)
             "signature_r": "deadbeefdeadbeef",
             "signature_s": "deadbeefdeadbeef",
+            "signature": "deadbeefdeadbeef", #this is the combined signature which
+                                             #can be used for openssl verification
 
             #version 3 specific values
             "creation_time": 1234567890,
@@ -796,6 +798,7 @@ class OpenPGPFile(list):
         elif pubkey_algo_id in [17, 19, 22]:
 
             #DSA value r
+            asn1_r = ""
             r_len_bytes = self.rawfile.read(2)
             r_len = int(r_len_bytes.encode('hex'), 16)
             r_numbytes = int(math.ceil(r_len / 8.0))
@@ -811,8 +814,14 @@ class OpenPGPFile(list):
                     result.setdefault("error_msg", []).append("DSA signature r has non-zero leading bits.")
                 r_hex = "{0:0{1}x}".format(r_int, r_numbytes * 2)
                 result['signature_r'] = r_hex
+                r_bigendian = r_hex #.decode("hex")[::-1].encode("hex")
+                if ord(r_bigendian[0:2].decode("hex")) > 127:
+                    asn1_r = "02{0:0{1}x}00".format(len(r_bigendian) / 2 + 1, 2) + r_bigendian
+                else:
+                    asn1_r = "02{0:0{1}x}".format(len(r_bigendian) / 2, 2) + r_bigendian
 
             #DSA value s
+            asn1_s = ""
             s_len_bytes = self.rawfile.read(2)
             s_len = int(s_len_bytes.encode('hex'), 16)
             s_numbytes = int(math.ceil(s_len / 8.0))
@@ -828,6 +837,15 @@ class OpenPGPFile(list):
                     result.setdefault("error_msg", []).append("DSA signature s has non-zero leading bits.")
                 s_hex = "{0:0{1}x}".format(s_int, s_numbytes * 2)
                 result['signature_s'] = s_hex
+                s_bigendian = s_hex #.decode("hex")[::-1].encode("hex")
+                if ord(s_bigendian[0:2].decode("hex")) > 127:
+                    asn1_s = "02{0:0{1}x}00".format(len(s_bigendian) / 2 + 1, 2) + s_bigendian
+                else:
+                    asn1_s = "02{0:0{1}x}".format(len(s_bigendian) / 2, 2) + s_bigendian
+
+            #asn.1 signature (for verifying signature via openssl)
+            asn1_sig = "30{0:0{1}x}".format(len(asn1_r + asn1_s) / 2, 2) + asn1_r + asn1_s
+            result['signature'] = asn1_sig
 
         #Reserved (formerly Elgamal Encrypt or Sign)
         elif pubkey_algo_id == 20:
@@ -1478,12 +1496,15 @@ class OpenPGPFile(list):
             #public key packet values
             "key_id": "deadbeefdeadbeef",
             "fingerprint": "deadbeefdeadbeefdeadbeefdeadbeef",
-            "pem": "-----BEGIN PUBLIC KEY-----\n...\n-----END PUBLIC KEY-----",
             "version": 3 or 4,
             "algo_id": 1,
             "algo_name": "RSA (Encrypt or Sign)",
             "creation_time": 1234567890,
             "valid_days": 30, #version 3 only
+
+            #public key for openssl verification
+            #(e.g. openssl dgst -sha1 -verify <this_pem> -signature <signature> <data>)
+            "pem": "-----BEGIN PUBLIC KEY-----\n...\n-----END PUBLIC KEY-----",
 
             #RSA specific (algo_ids 1, 2, 3)
             "n": "deadbeef", #RSA public modulus n
@@ -1675,6 +1696,7 @@ class OpenPGPFile(list):
 
         #DSA
         elif algo_id == 17:
+            pem_params = ""
 
             #prime p
             p_len_bytes = self.rawfile.read(2)
@@ -1692,6 +1714,7 @@ class OpenPGPFile(list):
                     result.setdefault("error_msg", []).append("DSA prime p has non-zero leading bits.")
                 p_hex = "{0:0{1}x}".format(p_int, p_numbytes * 2)
                 result['p'] = p_hex
+                pem_params += "0282{0:0{1}x}00".format(p_numbytes + 1, 4) + p_hex
 
             #group order q
             q_len_bytes = self.rawfile.read(2)
@@ -1709,6 +1732,7 @@ class OpenPGPFile(list):
                     result.setdefault("error_msg", []).append("DSA group order q has non-zero leading bits.")
                 q_hex = "{0:0{1}x}".format(q_int, q_numbytes * 2)
                 result['q'] = q_hex
+                pem_params += "0282{0:0{1}x}00".format(q_numbytes + 1, 4) + q_hex
 
             #generator g
             g_len_bytes = self.rawfile.read(2)
@@ -1726,8 +1750,10 @@ class OpenPGPFile(list):
                     result.setdefault("error_msg", []).append("DSA generator g has non-zero leading bits.")
                 g_hex = "{0:0{1}x}".format(g_int, g_numbytes * 2)
                 result['g'] = g_hex
+                pem_params += "0282{0:0{1}x}00".format(g_numbytes + 1, 4) + g_hex
 
             #public-key value y
+            pem_y = ""
             y_len_bytes = self.rawfile.read(2)
             y_len = int(y_len_bytes.encode('hex'), 16)
             y_numbytes = int(math.ceil(y_len / 8.0))
@@ -1743,9 +1769,14 @@ class OpenPGPFile(list):
                     result.setdefault("error_msg", []).append("DSA public-key value y has non-zero leading bits.")
                 y_hex = "{0:0{1}x}".format(y_int, y_numbytes * 2)
                 result['y'] = y_hex
+                pem_y += "0282{0:0{1}x}00".format(y_numbytes + 1, 4) + y_hex
 
-            #TODO: Make real pem bytes
-            pem_bytes = "\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff"
+            #pem format
+            pem_paramseq = "3082{0:0{1}x}".format(len(pem_params) / 2, 4) + pem_params
+            pem_dsaseq = "3082{0:0{1}x}06072a8648ce380401".format((len(pem_paramseq) + 18) / 2, 4) + pem_paramseq
+            pem_pubbits = "0382{0:0{1}x}00".format(len(pem_y) / 2 + 1, 4) + pem_y
+            pem_full = "3082{0:0{1}x}".format(len(pem_dsaseq + pem_pubbits) / 2, 4) + pem_dsaseq + pem_pubbits
+            pem_bytes = pem_full.decode("hex")
 
         #ECDH
         elif algo_id == 18:
@@ -2788,10 +2819,10 @@ class OpenPGPFile(list):
 |\
 (?P<sig>SIGNATURE)\
 )\
------\n\
-(?P<headers>.*?)\n\n\
-(?P<data64>.*?)\n\
-(?P<checksum>=[A-Za-z0-9\+\/]{4})\n\
+----- *\n+ *\
+(?P<headers>(?:[^:\n]+: [^\n]* *\n+ *)*) *\n+ *\
+(?P<data64>.*?) *\n+ *\
+(?P<checksum>=[A-Za-z0-9\+\/]{4}) *\n+ *\
 -----END PGP \
 (?P<end>\
 (?P<key2>(?:PUBLIC|PRIVATE) KEY BLOCK)\
@@ -2826,7 +2857,8 @@ class OpenPGPFile(list):
                 continue
 
             #convert the data64 to bytes
-            bytes = base64.b64decode(chunk['data64'])
+            bytes64 = chunk['data64'].replace(" ", "").replace("\n", "")
+            bytes = base64.b64decode(bytes64)
 
             #test the checksum
             checksum = int(base64.b64decode(chunk['checksum']).encode("hex"), 16)

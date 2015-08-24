@@ -94,12 +94,15 @@ command line, these are converted to json.
     #public key packet values
     "key_id": "deadbeefdeadbeef",
     "fingerprint": "deadbeefdeadbeefdeadbeefdeadbeef",
-    "pem": "-----BEGIN PUBLIC KEY-----\n...\n-----END PUBLIC KEY-----",
     "version": 3 or 4,
     "algo_id": 1,
     "algo_name": "RSA (Encrypt or Sign)",
     "creation_time": 1234567890,
     "valid_days": 30, #version 3 only
+
+    #public key for openssl verification
+    #(e.g. openssl dgst -sha1 -verify <this_pem> -signature <signature> <data>)
+    "pem": "-----BEGIN PUBLIC KEY-----\n...\n-----END PUBLIC KEY-----",
 
     #RSA specific (algo_ids 1, 2, 3)
     "n": "deadbeef", #RSA public modulus n
@@ -163,6 +166,7 @@ command line, these are converted to json.
     #DSA and ECDSA specific (algo_id 17)
     "signature_r": "deadbeefdeadbeef",
     "signature_s": "deadbeefdeadbeef",
+    "signature": "deadbeefdeadbeef", #ASN.1 signature for openssl verification
 
     #version 3 specific values
     "creation_time": 1234567890,
@@ -388,6 +392,29 @@ command line, these are converted to json.
   * [Modification Detection Code Packet (Tag 19)](https://tools.ietf.org/html/rfc4880#section-5.14)
 * Generating ASCII armored packets
 * Tests
+
+#### OpenSSL Signature Verification
+
+One of the goals of this project is to be able to verify signatures using only
+openssl. You can do this by dumping the public key `pem` key to a file, the
+signature hex to a file, and the signature data to a file.
+
+NOTE: This currently only works with DSA and RSA keys.
+
+Here's an example of verifying my self-signature on my first user id:
+
+```sh
+$ gpg --recv-key 72EFEE3D
+$ gpg --export 72EFEE3D > test.asc
+$ python openpgp.py -m test.asc > test.json
+Parsing test.asc...Done
+Dumping public keys...Done
+$ python -c 'import sys,json; sys.stdout.write(json.loads(open("test.json").read())["pem"])' > test.pub
+$ python -c 'import sys,json; sys.stdout.write(json.loads(open("test.json").read())["packets"][1]["data"].decode("hex"))' > test.data
+$ python -c 'import sys,json; sys.stdout.write(json.loads(open("test.json").read())["packets"][1]["signature"].decode("hex"))' > test.sig
+$ openssl dgst -sha1 -verify test.pub -signature test.sig test.data
+Verified OK
+```
 
 #### Keyserver dump
 
