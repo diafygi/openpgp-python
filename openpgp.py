@@ -8,7 +8,16 @@ import zlib
 import base64
 import hashlib
 import tempfile
-import cStringIO
+import io
+
+
+## Python 2 and 3 compat.  We don't just replace
+## xrange by range, because it creates a list in
+## Python 2. That might hurt performance a lot.
+try:
+    xrange
+except NameError:
+    xrange = range
 
 class OpenPGPFile(list):
     """
@@ -2840,13 +2849,13 @@ class OpenPGPFile(list):
             crc = INIT
             for c in map(ord, chars):
                 crc ^= (c << 16)
-                for i in xrange(8):
+                for i in range(8):
                     crc <<= 1
                     if crc & 0x1000000: crc ^= POLY
             return crc & 0xFFFFFF
 
         #go through the file and try to find the armored text
-        outfile = cStringIO.StringIO()
+        outfile = io.StringIO()
         fileobj.seek(0)
         file_str = fileobj.read()
         for chunk in armor_re.finditer(file_str):
@@ -2928,7 +2937,7 @@ python openpgp.py --merge-public-keys "/tmp/dump*.pgp" | gzip > pubkeys.json
                 for p in packets:
                     if p['tag_name'] == "Public-Key":
                         if key:
-                            print json.dumps(key, sort_keys=True, encoding="latin1")
+                            print(json.dumps(key, sort_keys=True, encoding="latin1"))
                         key = copy(p)
                     else:
                         #bubble errors
@@ -2936,7 +2945,7 @@ python openpgp.py --merge-public-keys "/tmp/dump*.pgp" | gzip > pubkeys.json
                             key['error'] = True
                             key.setdefault("error_msg", []).append(p['error_msg'])
                         key.setdefault("packets", []).append(p)
-                print json.dumps(key, sort_keys=True, encoding="latin1")
+                print(json.dumps(key, sort_keys=True, encoding="latin1"))
 
                 sys.stderr.write("Done\n")
                 sys.stderr.flush()
@@ -2948,7 +2957,7 @@ python openpgp.py --merge-public-keys "/tmp/dump*.pgp" | gzip > pubkeys.json
                 sys.stderr.flush()
 
                 for p in packets:
-                    print json.dumps(p, sort_keys=True, encoding="latin1")
+                    print(json.dumps(p, sort_keys=True, encoding="latin1"))
 
                 sys.stderr.write("Done\n")
                 sys.stderr.flush()
